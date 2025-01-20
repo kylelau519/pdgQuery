@@ -3,7 +3,7 @@ use crate::pdgdb::{Particle, ParticleDecay, ParticleMeasurement};
 
 
 
-fn get_particle_by_id(conn: &Connection, pdgid: i64) -> Result<Particle> {
+pub fn get_particle_by_id(conn: &Connection, pdgid: i64) -> Result<Particle> {
     let mut stmt = conn.prepare("SELECT * FROM pdgparticle WHERE mcid = ?1")?;
     // This line is very complicated,
     // First &[&pdgid] is the params substitution for the ?1 in the query
@@ -15,14 +15,14 @@ fn get_particle_by_id(conn: &Connection, pdgid: i64) -> Result<Particle> {
     Ok(particle)
 }
 
-fn get_particle_by_name(conn: &Connection, name: &str) -> Result<Particle> {
+pub fn get_particle_by_name(conn: &Connection, name: &str) -> Result<Particle> {
     let mut stmt = conn.prepare("SELECT * FROM pdgparticle WHERE name = ?1")?;
     let particle = stmt.query_row(&[&name], |row| map_particle(row))?;
 
     Ok(particle)
 }
 
-fn get_particle_by_node_id(conn: &Connection, node_id: &str) -> Result<Particle> {
+pub fn get_particle_by_node_id(conn: &Connection, node_id: &str) -> Result<Particle> {
     let mut stmt = conn.prepare("SELECT * FROM pdgparticle WHERE pdgid = ?1")?;
     let particle = stmt.query_row(&[&node_id], |row| map_particle(row))?;
 
@@ -106,6 +106,7 @@ fn get_particle_measurement(conn: &Connection, particle: &Particle) -> Result<Ve
     let mut stmt = conn.prepare(
         r#"
         SELECT
+            pdgid.pdgid,
             pdgid.description,
             pdgid.data_type,
             pdgdata.display_value_text,
@@ -220,16 +221,37 @@ mod tests {
             }
         }
     }
+    #[test]
+    fn test_get_particle_measurement(){
+        let conn = connect().unwrap();
+        let muon = Particle::test_muon();
+        match get_particle_measurement(&conn, &muon) {
+            Ok(measurement) => {
+                dbg!(&measurement);
+                assert!(measurement.len() > 0);
+            }
+            Err(e) => {
+                panic!("Failed to get particle measurement: {:?}", e);
+            }
+        }
+    }
 
     #[test]
     fn test_impl_particle_decay(){
         let conn = connect().unwrap();
         let mut muon = Particle::test_muon();
         muon.find_decay(&conn);
-        dbg!(&muon);
-        assert!(muon.decay.is_some());
-
+        if let Some(decay) = &muon.decay {
+            dbg!(decay);
+            assert!(decay.len() > 0);
+            assert_eq!(decay[0].mode_number, Some(1));
+            assert_eq!(decay[0].description, Some("mu- --> e- nubar_e nu_mu".to_string()));
+        } else {
+            panic!("Failed to get particle decay");
+        }
     }
+
+
 }
 
 #[cfg(test)]

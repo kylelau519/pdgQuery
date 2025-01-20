@@ -36,9 +36,9 @@ impl Particle{
     pub fn find_decay(&mut self, conn: &rusqlite::Connection){
         let search_node_id =  self
             .node_id
-            .as_ref().unwrap().clone();
-            // .map(|node_id| node_id.clone() + ".%")
-            // .ok_or(rusqlite::Error::InvalidQuery).unwrap();
+            .as_ref()
+            .map(|node_id| node_id.clone() + ".%")
+            .ok_or(rusqlite::Error::InvalidQuery).unwrap();
     
         let mut stmt = conn.prepare(
             r#"
@@ -94,6 +94,7 @@ impl Particle{
         let mut stmt = conn.prepare(
             r#"
             SELECT
+                pdgid.pdgid,
                 pdgid.description,
                 pdgid.data_type,
                 pdgdata.display_value_text,
