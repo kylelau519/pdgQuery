@@ -1,7 +1,10 @@
-The aim of this project is to create a querying tool using particle data group (PDG) released database without using their API.
+Disclaimer: this project is a personal project that aims to learn rust and create some tools for fun.
+
+The goal of this project is to create a querying tool using particle data group (PDG) released database without using their API.
 It is possible because the size of the database is very small, ~few MB.
 
 This project aims to achieve the following query:
+
 Querying by name/name alias/pdgid/node id
 - Using pdgQuery e, pdgQuery tau+, pdgQuery mu, pdgQuery 22, pdgQuery S003
 - Returning related informations including name, quantum numbers, parties, mass, decay channels and many other physical parameters.
