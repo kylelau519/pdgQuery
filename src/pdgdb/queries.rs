@@ -54,6 +54,7 @@ fn map_particle(row: &rusqlite::Row) -> Result<Particle>
     
     Ok(particle)
 }
+// This is refactored to particle impl
 fn get_particle_decay(conn: &Connection, particle: &Particle) -> Result<Vec<ParticleDecay>> {
     let search_node_id =  particle
         .node_id
@@ -97,6 +98,7 @@ fn get_particle_decay(conn: &Connection, particle: &Particle) -> Result<Vec<Part
     Ok(decay_data)
 }
 
+// This is refactored to particle impl
 fn get_particle_measurement(conn: &Connection, particle: &Particle) -> Result<Vec<ParticleMeasurement>> {
     let search_node_id =  particle
         .node_id
@@ -250,8 +252,6 @@ mod tests {
             panic!("Failed to get particle decay");
         }
     }
-
-
 }
 
 #[cfg(test)]
