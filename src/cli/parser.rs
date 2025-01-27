@@ -1,97 +1,87 @@
-use crate::pdgdb::connection::connect;
-use crate::pdgdb::queries::{get_particle_by_id, get_particle_by_name, get_particle_by_node_id};
-use crate::pdgdb::Particle;
+use crate::pdgdb::{connection::connect, queries::get_particle_by_name};
 
 #[derive(PartialEq, Debug)]
-pub enum input_type{
+pub enum QueryType{
     SingleParticle,        // Query for a single particle, e.g., `pdgQuery tau+`
-    DecayExact,            // Query for exact decay, e.g., `pdgQuery ? -> e e`
-    DecayPartial,          // Query for decays with partially specified final states, e.g., `pdgQuery ? -> e ? ?`
+    ExactDecay,            // Query for exact decay, e.g., `pdgQuery Z -> e e`
+    PartialDecay,    // Query for exact decay with daughter specified, e.g., `pdgQuery Z -> e ?`
+    ParentlessDecayExact,  // Query for exact decay with no parent specified, e.g., `pdgQuery ? -> e e`
+    ParentlessDecayPartial, // Query for decays with no parent specified, e.g., `pdgQuery ? -> e ? ?`
     DecayWithWildcard,     // Query for decays with wildcard matching, e.g., `pdgQuery ? -> e nu_e ?*`
     // PhysicalPropertySearch, // Query for particles matching specific physical properties
     Unknown,               // Unknown query type
 }
 
-pub fn input_type_classifier(user_input: &Vec<String>) -> input_type{
+pub fn query_verify(args: &Vec<String>){
+    let conn = connect().unwrap();
+    for name in args.iter(){
+        if name == &"pdgQuery" || name == &"?" || name == &"?*"{continue;}
+        let particle = get_particle_by_name(&conn, &name);
+        match particle{
+            Ok(_) => continue,
+            Err(_) => panic!("Particle {} not found in the database", name),
+        }
+    }
+}
+
+pub fn query_type_classifier(user_input: &Vec<String>) -> QueryType{
     if user_input.len() == 2 {
-        return input_type::SingleParticle;
+        return QueryType::SingleParticle;
     }
     else if user_input.contains(&"->".to_string())
     {
+        if user_input.iter().any(|item| item == "?*")
+        {
+            return QueryType::DecayWithWildcard;
+        }
         let decay_products = user_input
             .iter()
             .skip_while(|&item| item != "->")
             .skip(1)
             .collect::<Vec<&String>>();
 
-        if decay_products.iter().any(|&item| item == "?"){
-            return input_type::DecayPartial;
-        }
-        else if decay_products.iter().any(|&item| item == "?*")
-        {
-            return input_type::DecayWithWildcard;
-        }
-        else if decay_products.iter().all(|&item| item != "?"){
-            return input_type::DecayExact;
-        };
+        let parent = user_input.iter().nth(1).unwrap();
+        let is_exact_parent = parent != "?";
+        let is_exact_daughter = decay_products.iter().all(|&item| item != "?");
 
+        match (is_exact_parent, is_exact_daughter){
+            (true, true) => return QueryType::ExactDecay,
+            (true, false) => return QueryType::PartialDecay,
+            (false, true) => return QueryType::ParentlessDecayExact,
+            (false, false) => return QueryType::ParentlessDecayPartial,
+        }
     }
-    input_type::Unknown
+    QueryType::Unknown
 
 }    
 
-pub fn arg_to_particle(argument: &str) -> Option<Particle>{
-    println!("Argument: {}", argument);
-    match argument.parse::<i64>() {
-        Ok(pdgid) => {
-            let conn = connect().unwrap();
-            Some(get_particle_by_id(&conn, pdgid).unwrap())
-        }
-        Err(_) => {
-            let conn = connect().unwrap();
-            Some(get_particle_by_name(&conn, argument).unwrap())
-        }
-    }
-
-}
-
-pub fn single_particle_query(user_input:&str) -> Option<Particle>{
-    let conn = connect().unwrap();
-    if let Ok(id) = user_input.parse::<i64>(){
-        if let Ok(particle) = get_particle_by_id(&conn, id)
-        {
-            return Some(particle);
-        }
-    }
-    if let Ok(particle) = get_particle_by_name(&conn, &user_input){
-        return Some(particle);
-    }
-    if let Ok(particle) = get_particle_by_node_id(&conn, &user_input){
-        return Some(particle)
-    }
-    None
-}
-
-
 #[cfg(test)]
-mod tests{
+mod test {
     use super::*;
+
     #[test]
-    fn test_input_type_classifier(){
+    fn test_QueryType_classifier(){
         let user_input = vec!["pdgQuery".to_string(), "tau+".to_string()];
-        assert_eq!(input_type_classifier(&user_input), input_type::SingleParticle);
+        assert_eq!(query_type_classifier(&user_input), QueryType::SingleParticle);
+
+        let user_input = vec!["pdgQuery".to_string(), "Z".to_string(), "->".to_string(), "e".to_string(), "e".to_string()];
+        assert_eq!(query_type_classifier(&user_input), QueryType::ExactDecay);
+
+        let user_input = vec!["pdgQuery".to_string(), "Z".to_string(), "->".to_string(), "e".to_string(), "?".to_string()];
+        assert_eq!(query_type_classifier(&user_input), QueryType::PartialDecay);
 
         let user_input = vec!["pdgQuery".to_string(), "?".to_string(), "->".to_string(), "e".to_string(), "e".to_string()];
-        assert_eq!(input_type_classifier(&user_input), input_type::DecayExact);
+        assert_eq!(query_type_classifier(&user_input), QueryType::ParentlessDecayExact);
 
         let user_input = vec!["pdgQuery".to_string(), "?".to_string(), "->".to_string(), "e".to_string(), "?".to_string(), "?".to_string()];
-        assert_eq!(input_type_classifier(&user_input), input_type::DecayPartial);
+        assert_eq!(query_type_classifier(&user_input), QueryType::ParentlessDecayPartial);
 
         let user_input = vec!["pdgQuery".to_string(), "?".to_string(), "->".to_string(), "e".to_string(), "nu_e".to_string(), "?*".to_string()];
-        assert_eq!(input_type_classifier(&user_input), input_type::DecayWithWildcard);
+        assert_eq!(query_type_classifier(&user_input), QueryType::DecayWithWildcard);
 
-        let user_input = vec!["pdgQuery".to_string(), "tau+".to_string(), "e".to_string()];
-        assert_eq!(input_type_classifier(&user_input), input_type::Unknown);
+        let user_input = vec!["pdgQuery".to_string(), "tau+".to_string(), "tau-".to_string()];
+        assert_eq!(query_type_classifier(&user_input), QueryType::Unknown);
+
+
     }
-    
 }

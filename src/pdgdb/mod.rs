@@ -169,3 +169,11 @@ pub struct ParticleMeasurement
 }
 
 
+#[derive(Debug)]
+pub struct DecayChannel{
+    pub parent: Particle,
+    pub daughters: Vec<(Particle, u16)>,
+    pub pdgid: String,
+    // pub cross_section: f64,
+    // pub branching_ratio: f64,
+}

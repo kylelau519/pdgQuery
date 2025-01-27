@@ -1,5 +1,10 @@
+use core::panic;
+use std::collections::HashMap;
+
 use rusqlite::{Connection, Result};
-use crate::pdgdb::{Particle, ParticleDecay, ParticleMeasurement};
+use crate::{cli::parser::{QueryType, query_type_classifier}, pdgdb::{DecayChannel, Particle}};
+
+use super::connection::connect;
 
 
 
@@ -10,22 +15,26 @@ pub fn get_particle_by_id(conn: &Connection, pdgid: i64) -> Result<Particle> {
     // If our query is "SELECT * FROM pdgparticle WHERE mcid = ?1 AND name = ?2", we would have &[&pdgid, &name]
     // The second argument is a closure, it is called after receiving return value from the query_row method
     // It is called not because of the syntax, but because of the query_row method
-    let particle = stmt.query_row(&[&pdgid], |row| map_particle(row))?; 
-
+    let mut particle = stmt.query_row(&[&pdgid], |row| map_particle(row))?; 
+    particle.find_decay(conn);
+    particle.find_measurement(conn);
     Ok(particle)
 }
 
 pub fn get_particle_by_name(conn: &Connection, name: &str) -> Result<Particle> {
     let mut stmt = conn.prepare("SELECT * FROM pdgparticle WHERE name = ?1")?;
-    let particle = stmt.query_row(&[&name], |row| map_particle(row))?;
+    let mut particle = stmt.query_row(&[&name], |row| map_particle(row))?;
+    particle.find_decay(conn);
+    particle.find_measurement(conn);
 
     Ok(particle)
 }
 
 pub fn get_particle_by_node_id(conn: &Connection, node_id: &str) -> Result<Particle> {
     let mut stmt = conn.prepare("SELECT * FROM pdgparticle WHERE pdgid = ?1")?;
-    let particle = stmt.query_row(&[&node_id], |row| map_particle(row))?;
-
+    let mut particle = stmt.query_row(&[&node_id], |row| map_particle(row))?;
+    particle.find_decay(conn);
+    particle.find_measurement(conn);
     Ok(particle)
 }
 
@@ -54,101 +63,118 @@ fn map_particle(row: &rusqlite::Row) -> Result<Particle>
     
     Ok(particle)
 }
-// This is refactored to particle impl
-fn get_particle_decay(conn: &Connection, particle: &Particle) -> Result<Vec<ParticleDecay>> {
-    let search_node_id =  particle
-        .node_id
-        .as_ref()
-        .map(|node_id| node_id.clone() + ".%")
-        .ok_or(rusqlite::Error::InvalidQuery)?;
-    let mut stmt = conn.prepare(
-        r#"
-        SELECT
-            pdgid.pdgid,
-            pdgid.sort,
-            pdgid.mode_number,
-            pdgid.description,
-            pdgdata.display_value_text,
-            pdgdata.value,
-            pdgdata.error_positive AS plus_error,
-            pdgdata.error_negative AS minus_error
-        FROM
-            pdgid
-        INNER JOIN
-            pdgdata
-        ON
-            pdgid.pdgid = pdgdata.pdgid
-        WHERE
-            pdgid.pdgid LIKE ?1
-        "#,
-    )?;
-    let mut decay_data = stmt.query_map(&[&search_node_id], |row|{
-        Ok(ParticleDecay{
-            node_id: row.get("pdgid")?,
-            sort_order: row.get("sort")?,
-            mode_number: row.get("mode_number")?,
-            description: row.get("description")?,
-            display_value: row.get("display_value_text")?,
-            value: row.get("value")?,
-            plus_error: row.get("plus_error")?,
-            minus_error: row.get("minus_error")?,
-        })
-    })?.collect::<Result<Vec<ParticleDecay>>>()?;
-    decay_data.sort_by_key(|decay| decay.mode_number );
-    Ok(decay_data)
+
+pub fn single_particle_query(args:&str) -> Option<Particle>{
+    let conn = connect().unwrap();
+    if let Ok(id) = args.parse::<i64>(){
+        if let Ok(particle) = get_particle_by_id(&conn, id)
+        {
+            return Some(particle);
+        }
+    }
+    if let Ok(particle) = get_particle_by_name(&conn, &args){
+        return Some(particle);
+    }
+    if let Ok(particle) = get_particle_by_node_id(&conn, &args){
+        return Some(particle);
+    }
+    None
 }
 
-// This is refactored to particle impl
-fn get_particle_measurement(conn: &Connection, particle: &Particle) -> Result<Vec<ParticleMeasurement>> {
-    let search_node_id =  particle
-        .node_id
-        .as_ref()
-        .map(|node_id| node_id.clone() + "%")
-        .ok_or(rusqlite::Error::InvalidQuery)?;
-    let mut stmt = conn.prepare(
-        r#"
-        SELECT
-            pdgid.pdgid,
-            pdgid.description,
-            pdgid.data_type,
-            pdgdata.display_value_text,
-            pdgdata.value,
-            pdgdata.display_power_of_ten,
-            pdgdata.unit_text,
-            pdgdata.scale_factor,
-            pdgdata.limit_type,
-            pdgdata.error_positive AS plus_error,
-            pdgdata.error_negative AS minus_error
-        FROM
-            pdgid
-        INNER JOIN
-            pdgdata
-        ON
-            pdgid.pdgid = pdgdata.pdgid
-        WHERE
-            pdgid.pdgid LIKE ?1
-        AND
-            pdgid.pdgid NOT LIKE '%.%'
-        "#,
-    )?;
-    let mut measurement_data = stmt.query_map(&[&search_node_id], |row|{
-        Ok(ParticleMeasurement{
-            node_id: row.get("pdgid")?,
-            description: row.get("description")?,
-            data_type: row.get("data_type")?,
 
-            value: row.get("value")?,
-            display_value: row.get("display_value_text")?,
-            display_power_of_ten: row.get("display_power_of_ten")?,
-            unit_text: row.get("unit_text")?,
-            scale_factor: row.get("scale_factor")?,
-            limit_type: row.get("limit_type")?,
-            plus_error: row.get("plus_error")?,
-            minus_error: row.get("minus_error")?,
-        })
-    })?.collect::<Result<Vec<ParticleMeasurement>>>()?;
+// pub fn decay_query(args: &Vec<String>) -> Result<Vec<DecayChannel>>{
+//     let conn = connect().unwrap();
+//     let query_type = query_type_classifier(args);
+//     let decay_products = get_decay_products(args);
+//     let daughters_profile = particles_dict(&decay_products);
 
-    Ok(measurement_data)
+//     let number_of_particles:i32 = daughters_profile
+//         .iter()
+//         .filter(|(name, _count)|*name != &"?*")
+//         .map(|(_name, count)| count)
+//         .sum();
+            
+//     let mut candidates: Vec<DecayChannel> = Vec::new();
+
+//     let mut where_clause = Vec::new();
+//     let mut params: Vec<String> = Vec::new();
+
+//     for (name, count) in daughters_profile.iter(){
+//         where_clause.push("(name = ? AND multiplier = ? AND is_outgoing = 1)");
+//         params.push(name.to_string());
+//         params.push(count.to_string());
+//     }
+//     let count_clause = match query_type{
+//         QueryType::ExactDecay => format!("= {}", number_of_particles),
+//         QueryType::ParentlessDecayExact => format!("= {}", number_of_particles),
+//         QueryType::PartialDecay => format!("= {}", number_of_particles),
+//         QueryType::ParentlessDecayPartial => format!("= {}", number_of_particles),
+//         QueryType::DecayWithWildcard => format!(">= {}", number_of_particles),
+//         _ => panic!("Invalid query type passed to decay query"),
+//     };
+
+//     let where_clause = where_clause.join(" OR ");
+//     let query = format!(
+//         r#"SELECT 
+//             pdgid
+//             name
+//             is_outgoing
+//             multiplier 
+//         FROM 
+//             pdgdecay 
+//         WHERE 
+//             {where_clause}
+//         GROUP BY 
+//             pdgid, name, is_outgoing, multiplier
+//         HAVING
+//             COUNT(*) {count_clause}
+//         "#);
+
+//     let mut stmt = conn.prepare(&query)?;
+//     let mut rows = stmt.query([])?;
+//     let mut grouped_data: HashMap<String, (Particle, Vec<(Particle, u16)>)> = HashMap::new();
+//     while let Some(row) = rows.next()?{
+//         let pdgid: String = row.get("pdgid")?;
+//         let name: String = row.get("name")?;
+//         let is_outgoing: bool = row.get("is_outgoing")?;
+//         let multiplier: u16 = row.get("multiplier")?;
+        
+//         let particle = get_particle_by_name(&conn, &name)?;
+//         let decay = grouped_data.entry(name.clone()).or_insert((particle, Vec::new()));
+//         if is_outgoing{
+//             decay.1.push((particle, multiplier));
+//         } else {
+//             decay.0 = particle;
+//         }
+//     }
+//     while let Some((name, (parent, daughters))) = grouped_data.into_iter().next(){
+//         let mut decay_channel = DecayChannel{
+//             parent: parent,
+//             daughters: daughters,
+//             pdgid: name,
+//         };
+//         candidates.push(decay_channel);
+//     }
+
+//     Ok(candidates)
+// }
+
+fn particles_dict<'a>(particles: &Vec<&'a str>) -> HashMap<&'a str, i32>{
+    let mut dict = HashMap::new();
+    for particle in particles{
+        let count = dict.entry(*particle).or_insert(0 as i32);
+        *count += 1;
+    }
+    dict
+}
+
+fn get_decay_products(args: &Vec<String>) -> Vec<&str>{
+    let decay_products = args
+        .iter()
+        .skip_while(|&item| item != "->")
+        .skip(1)
+        .collect::<Vec<&String>>();
+    decay_products.iter().map(|item| item.as_str()).collect::<Vec<&str>>()
 }
 
 #[cfg(test)]
@@ -207,39 +233,7 @@ mod tests {
         assert_eq!(particle.pdgitem_id, Some(76395));
     }
     #[test]
-    fn test_get_particle_decay(){
-        let conn = connect().unwrap();
-        let muon = Particle::test_muon();
-        
-        match get_particle_decay(&conn, &muon) {
-            Ok(decay) => {
-                dbg!(&decay);
-                assert!(decay.len() > 0);
-                assert_eq!(decay[0].mode_number, Some(1));
-                assert_eq!(decay[0].description, Some("mu- --> e- nubar_e nu_mu".to_string()));
-            }
-            Err(e) => {
-                panic!("Failed to get particle decay: {:?}", e);
-            }
-        }
-    }
-    #[test]
-    fn test_get_particle_measurement(){
-        let conn = connect().unwrap();
-        let muon = Particle::test_muon();
-        match get_particle_measurement(&conn, &muon) {
-            Ok(measurement) => {
-                dbg!(&measurement);
-                assert!(measurement.len() > 0);
-            }
-            Err(e) => {
-                panic!("Failed to get particle measurement: {:?}", e);
-            }
-        }
-    }
-
-    #[test]
-    fn test_impl_particle_decay(){
+    fn test_particle_decay(){
         let conn = connect().unwrap();
         let mut muon = Particle::test_muon();
         muon.find_decay(&conn);
@@ -249,7 +243,44 @@ mod tests {
             assert_eq!(decay[0].mode_number, Some(1));
             assert_eq!(decay[0].description, Some("mu- --> e- nubar_e nu_mu".to_string()));
         } else {
-            panic!("Failed to get particle decay");
+            self::panic!("Decay data not found");
+        }   
+    }
+
+    #[test]
+    fn test_query_format(){
+        let conn = connect().unwrap();
+        let args = vec!["pi+".to_string(), "->".to_string(), "mu+".to_string(), "?".to_string()];
+
+        let mut params: Vec<String> = Vec::new();
+
+        let where_clause = "(name = 'mu+' AND multiplier = 1 AND is_outgoing = 1)";
+        params.push("mu+".to_string());
+        params.push(1.to_string());
+
+       let query = format!(
+        r#"SELECT 
+            pdgid
+            name
+            is_outgoing
+            multiplier 
+        FROM 
+            pdgdecay 
+        WHERE 
+            {where_clause}
+        GROUP BY 
+            pdgid
+        HAVING
+            COUNT(*) =2
+        "#); 
+        let mut stmt = conn.prepare(&query).unwrap();
+        let mut rows = stmt.query([]).unwrap();
+        while let Some(row) = rows.next().unwrap(){
+            let pdgid: String = row.get("pdgid").unwrap();
+            let name: String = row.get("name").unwrap();
+            let is_outgoing: bool = row.get("is_outgoing").unwrap();
+            let multiplier: u16 = row.get("multiplier").unwrap();
+            dbg!(pdgid, name, is_outgoing, multiplier);
         }
     }
 }

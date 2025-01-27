@@ -78,7 +78,7 @@ fn print_measurement_info(measurement: &ParticleMeasurement) {
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
     use crate::pdgdb::connection::connect;
 
