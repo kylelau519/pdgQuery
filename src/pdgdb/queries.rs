@@ -82,82 +82,51 @@ pub fn single_particle_query(args:&str) -> Option<Particle>{
 }
 
 
-// pub fn decay_query(args: &Vec<String>) -> Result<Vec<DecayChannel>>{
-//     let conn = connect().unwrap();
-//     let query_type = query_type_classifier(args);
-//     let decay_products = get_decay_products(args);
-//     let daughters_profile = particles_dict(&decay_products);
+pub fn decay_query(args: &Vec<String>) -> Result<Vec<DecayChannel>>{
+    let conn = connect().unwrap();
+    let possible_decays = decay_query_get_all_possible_decays(args)?;
 
-//     let number_of_particles:i32 = daughters_profile
-//         .iter()
-//         .filter(|(name, _count)|*name != &"?*")
-//         .map(|(_name, count)| count)
-//         .sum();
-            
-//     let mut candidates: Vec<DecayChannel> = Vec::new();
 
-//     let mut where_clause = Vec::new();
-//     let mut params: Vec<String> = Vec::new();
+    let number_of_particles:i32 = daughters_profile
+        .iter()
+        .filter(|(name, _count)|*name != &"?*")
+        .map(|(_name, count)| count)
+        .sum();
+    let mut candidates: Vec<DecayChannel> = Vec::new();
 
-//     for (name, count) in daughters_profile.iter(){
-//         where_clause.push("(name = ? AND multiplier = ? AND is_outgoing = 1)");
-//         params.push(name.to_string());
-//         params.push(count.to_string());
-//     }
-//     let count_clause = match query_type{
-//         QueryType::ExactDecay => format!("= {}", number_of_particles),
-//         QueryType::ParentlessDecayExact => format!("= {}", number_of_particles),
-//         QueryType::PartialDecay => format!("= {}", number_of_particles),
-//         QueryType::ParentlessDecayPartial => format!("= {}", number_of_particles),
-//         QueryType::DecayWithWildcard => format!(">= {}", number_of_particles),
-//         _ => panic!("Invalid query type passed to decay query"),
-//     };
+    Ok(candidates)
+}
+fn decay_query_get_all_possible_decays(args: &Vec<String>) -> Result<Vec<String>>{
+    let conn = connect().unwrap();
+    let decay_products = get_decay_products(args);
+    let daughters_profile = particles_dict(&decay_products);
+    let where_clause = where_clause_formatter(&daughters_profile);
+    let query = format!(
+        r#"SELECT DISTINCT pdgid
+        FROM pdgdecay
+        WHERE 
+        {where_clause}
+        "#);
+    
+    let mut stmt = conn.prepare(&query)?;
+    let mut rows = stmt.query([])?;
+    let mut candidates: Vec<String> = Vec::new();
+    while let Some(row) = rows.next()? {
+        let pdgid: String = row.get(0)?;
+        candidates.push(pdgid);
+    }
+    Ok(candidates)
+}
 
-//     let where_clause = where_clause.join(" OR ");
-//     let query = format!(
-//         r#"SELECT 
-//             pdgid
-//             name
-//             is_outgoing
-//             multiplier 
-//         FROM 
-//             pdgdecay 
-//         WHERE 
-//             {where_clause}
-//         GROUP BY 
-//             pdgid, name, is_outgoing, multiplier
-//         HAVING
-//             COUNT(*) {count_clause}
-//         "#);
-
-//     let mut stmt = conn.prepare(&query)?;
-//     let mut rows = stmt.query([])?;
-//     let mut grouped_data: HashMap<String, (Particle, Vec<(Particle, u16)>)> = HashMap::new();
-//     while let Some(row) = rows.next()?{
-//         let pdgid: String = row.get("pdgid")?;
-//         let name: String = row.get("name")?;
-//         let is_outgoing: bool = row.get("is_outgoing")?;
-//         let multiplier: u16 = row.get("multiplier")?;
-        
-//         let particle = get_particle_by_name(&conn, &name)?;
-//         let decay = grouped_data.entry(name.clone()).or_insert((particle, Vec::new()));
-//         if is_outgoing{
-//             decay.1.push((particle, multiplier));
-//         } else {
-//             decay.0 = particle;
-//         }
-//     }
-//     while let Some((name, (parent, daughters))) = grouped_data.into_iter().next(){
-//         let mut decay_channel = DecayChannel{
-//             parent: parent,
-//             daughters: daughters,
-//             pdgid: name,
-//         };
-//         candidates.push(decay_channel);
-//     }
-
-//     Ok(candidates)
-// }
+fn where_clause_formatter(profile: &HashMap<&str, i32>) -> String{
+    let mut where_clause:Vec<String> = Vec::new();
+    for (name, count) in profile{
+        if name == &"?*" || name == &"?"{ continue; }
+        where_clause.push(format!(
+            "pdgid IN (SELECT pdgid FROM pdgdecay WHERE name = '{}' AND multiplier = {} AND is_outgoing = 1)", name, count));
+        }
+    where_clause.join(" AND ")
+}
 
 fn particles_dict<'a>(particles: &Vec<&'a str>) -> HashMap<&'a str, i32>{
     let mut dict = HashMap::new();
@@ -250,37 +219,17 @@ mod tests {
     #[test]
     fn test_query_format(){
         let conn = connect().unwrap();
-        let args = vec!["pi+".to_string(), "->".to_string(), "mu+".to_string(), "?".to_string()];
-
-        let mut params: Vec<String> = Vec::new();
-
-        let where_clause = "(name = 'mu+' AND multiplier = 1 AND is_outgoing = 1)";
-        params.push("mu+".to_string());
-        params.push(1.to_string());
-
-       let query = format!(
-        r#"SELECT 
-            pdgid
-            name
-            is_outgoing
-            multiplier 
-        FROM 
-            pdgdecay 
-        WHERE 
-            {where_clause}
-        GROUP BY 
-            pdgid
-        HAVING
-            COUNT(*) =2
-        "#); 
+        let args = vec!["pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string()];
+        let where_clause = where_clause_formatter(&particles_dict(&get_decay_products(&args)));
+        dbg!(&where_clause);
+        let query = format!(
+            r#"SELECT DISTINCT pdgid FROM pdgdecay WHERE {where_clause}"#);
+        dbg!(&query);
         let mut stmt = conn.prepare(&query).unwrap();
         let mut rows = stmt.query([]).unwrap();
-        while let Some(row) = rows.next().unwrap(){
-            let pdgid: String = row.get("pdgid").unwrap();
-            let name: String = row.get("name").unwrap();
-            let is_outgoing: bool = row.get("is_outgoing").unwrap();
-            let multiplier: u16 = row.get("multiplier").unwrap();
-            dbg!(pdgid, name, is_outgoing, multiplier);
+        while let Some(row) = rows.next().unwrap() {
+            let pdgid: String = row.get(0).unwrap();
+            dbg!(pdgid);
         }
     }
 }
