@@ -194,3 +194,50 @@ impl DecayChannel{
         self.parent = particle;
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pdgdb::connection::connect;
+
+    #[test]
+    fn test_particle_decay(){
+        let conn = connect().unwrap();
+        let mut muon = Particle::test_muon();
+        muon.find_decay(&conn);
+        if let Some(decay) = &muon.decay {
+            dbg!(decay);
+            assert!(decay.len() > 0);
+            assert_eq!(decay[0].mode_number, Some(1));
+            assert_eq!(decay[0].description, Some("mu- --> e- nubar_e nu_mu".to_string()));
+        } else {
+            panic!("Decay data not found");
+        }   
+    }
+}
+
+#[cfg(test)]
+impl Particle{
+    pub fn test_muon() -> Self{
+        Particle{
+            name: Some("mu-".to_string()),
+            alias: None,
+            pdgid: Some(13),
+            node_id: Some("S004".to_string()),
+            charge: Some(-1.0),
+            mass: None,
+            decay_width: None,
+            j_spin: Some("1/2".to_string()),
+            i_spin: Some("1/2".to_string()),
+            charge_parity: Some("-".to_string()),
+            space_parity: Some("+".to_string()),
+            g_parity: Some("-".to_string()),
+            decay: None,
+            id: Some(28849),
+            pdgid_id: Some(464),
+            pdgitem_id: Some(76255),
+            measurements: None,
+        }
+    }
+}

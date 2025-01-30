@@ -1,4 +1,4 @@
-use crate::pdgdb::{connection::connect, queries::get_particle_by_name};
+use crate::pdgdb::{connection::connect, queries::singleQueries::ParticleQuery};
 
 #[derive(PartialEq, Debug)]
 pub enum QueryType{
@@ -13,13 +13,13 @@ pub enum QueryType{
 }
 
 pub fn query_verify(args: &Vec<String>){
-    let conn = connect().unwrap();
+    let query = ParticleQuery::new();
     for name in args.iter(){
         if name == &"pdgQuery" || name == &"?" || name == &"?*"{continue;}
-        let particle = get_particle_by_name(&conn, &name);
+        let particle = query.query(&name);
         match particle{
-            Ok(_) => continue,
-            Err(_) => panic!("Particle {} not found in the database", name),
+            Some(_) => continue,
+            None => panic!("Particle {} not found in the database", name),
         }
     }
 }
