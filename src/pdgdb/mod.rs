@@ -4,7 +4,8 @@ use rusqlite::Result;
 pub mod connection;
 pub mod queries;
 
-#[derive(Debug)]
+
+#[derive(Debug, Default)]
 pub struct Particle 
 {
     pub name: Option<String>,
@@ -174,6 +175,22 @@ pub struct DecayChannel{
     pub parent: Particle,
     pub daughters: Vec<(Particle, u16)>,
     pub pdgid: String,
-    // pub cross_section: f64,
-    // pub branching_ratio: f64,
+}
+
+impl DecayChannel{
+    fn new(pdgid:String) -> DecayChannel{
+        DecayChannel{
+            parent: Particle::default(),
+            daughters: Vec::new(),
+            pdgid: pdgid,
+        }
+    }
+
+    fn add_daughter(&mut self, particle:Particle, multiplicity: u16){
+        self.daughters
+            .push((particle, multiplicity));
+    }
+    fn add_parent(&mut self, particle:Particle){
+        self.parent = particle;
+    }
 }

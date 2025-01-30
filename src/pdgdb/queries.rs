@@ -1,5 +1,8 @@
+mod singleQueries;
+mod decayQueries;
+
 use core::panic;
-use std::collections::HashMap;
+use std::{collections::{HashMap, HashSet}, fmt::format};
 
 use rusqlite::{Connection, Result};
 use crate::{cli::parser::{QueryType, query_type_classifier}, pdgdb::{DecayChannel, Particle}};
@@ -38,8 +41,7 @@ pub fn get_particle_by_node_id(conn: &Connection, node_id: &str) -> Result<Parti
     Ok(particle)
 }
 
-fn map_particle(row: &rusqlite::Row) -> Result<Particle>
-{
+fn map_particle(row: &rusqlite::Row) -> Result<Particle> {
     let mut particle = Particle {
         name: row.get("name")?,
         id: row.get("id")?,
@@ -84,23 +86,41 @@ pub fn single_particle_query(args:&str) -> Option<Particle>{
 
 pub fn decay_query(args: &Vec<String>) -> Result<Vec<DecayChannel>>{
     let conn = connect().unwrap();
-    let possible_decays = decay_query_get_all_possible_decays(args)?;
-
-
-    let number_of_particles:i32 = daughters_profile
-        .iter()
-        .filter(|(name, _count)|*name != &"?*")
-        .map(|(_name, count)| count)
-        .sum();
     let mut candidates: Vec<DecayChannel> = Vec::new();
-
     Ok(candidates)
 }
-fn decay_query_get_all_possible_decays(args: &Vec<String>) -> Result<Vec<String>>{
+
+fn get_all_possible_decyas_extensive(args: &Vec<String>, pdgids:&Vec<String>) -> Result<HashSet<String>>{
     let conn = connect().unwrap();
-    let decay_products = get_decay_products(args);
-    let daughters_profile = particles_dict(&decay_products);
-    let where_clause = where_clause_formatter(&daughters_profile);
+    let query_type = query_type_classifier(args);
+    let count_clause = count_clause_formatter(args); 
+    let mut query = format!(
+            r#"
+            SELECT 
+                *
+            FROM 
+                pdgdecay
+            WHERE 
+                pdgid = ?1
+            AND
+                (SELECT COUNT(*) FROM pdgdecay WHERE pdgid = ?1){}
+            "#, count_clause);
+
+    let mut pdgids_passed: HashSet<String> = HashSet::new();
+    for pdgid in pdgids{
+        let mut stmt = conn.prepare(&query)?;
+        let mut rows = stmt.query(&[&pdgid])?;
+        while let Some(row) = rows.next()?{
+            let pdgid: String = row.get("pdgid")?;
+            pdgids_passed.insert(pdgid);
+        }
+    }
+    Ok(pdgids_passed)
+}
+
+fn get_all_possible_decays_inclusive(args: &Vec<String>) -> Result<Vec<String>>{
+    let conn = connect().unwrap();
+    let where_clause = where_clause_formatter(args);
     let query = format!(
         r#"SELECT DISTINCT pdgid
         FROM pdgdecay
@@ -118,10 +138,29 @@ fn decay_query_get_all_possible_decays(args: &Vec<String>) -> Result<Vec<String>
     Ok(candidates)
 }
 
-fn where_clause_formatter(profile: &HashMap<&str, i32>) -> String{
+fn count_clause_formatter(args: &Vec<String>) -> String{
+    let profile = particles_dict(&get_decay_products(args));
+    let query_type = query_type_classifier(args);
+    let num_particles: i32 = profile
+        .iter()
+        .filter(|(name, _count)| *name != &"?*")
+        .map(|(_name, count)| count)
+        .sum();
+    match query_type {
+        QueryType::ExactDecay | QueryType::ParentlessDecayExact | QueryType::PartialDecay | QueryType::ParentlessDecayPartial => {
+            format!("={}",(num_particles + 1)) // Plus one because of the parent particle
+        }
+        QueryType::DecayWithWildcard => format!(">={}", num_particles),
+        QueryType::SingleParticle => panic!("Single particle query not supported"),
+        QueryType::Unknown => panic!("Unknown query type"),
+    }
+}   
+
+fn where_clause_formatter(args: &Vec<String>) -> String{
+    let profile = particles_dict(&get_decay_products(args));
     let mut where_clause:Vec<String> = Vec::new();
     for (name, count) in profile{
-        if name == &"?*" || name == &"?"{ continue; }
+        if name == "?*" || name == "?"{ continue; }
         where_clause.push(format!(
             "pdgid IN (SELECT pdgid FROM pdgdecay WHERE name = '{}' AND multiplier = {} AND is_outgoing = 1)", name, count));
         }
@@ -217,21 +256,83 @@ mod tests {
     }
 
     #[test]
-    fn test_query_format(){
+    fn test_where_query_format(){
         let conn = connect().unwrap();
         let args = vec!["pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string()];
-        let where_clause = where_clause_formatter(&particles_dict(&get_decay_products(&args)));
+        let where_clause = where_clause_formatter(&args);
         dbg!(&where_clause);
         let query = format!(
             r#"SELECT DISTINCT pdgid FROM pdgdecay WHERE {where_clause}"#);
         dbg!(&query);
         let mut stmt = conn.prepare(&query).unwrap();
         let mut rows = stmt.query([]).unwrap();
+        let mut pdgids: Vec<String> = Vec::new();
         while let Some(row) = rows.next().unwrap() {
-            let pdgid: String = row.get(0).unwrap();
-            dbg!(pdgid);
+            pdgids.push(row.get(0).unwrap());
         }
+        dbg!(&pdgids);
     }
+
+    #[test]
+    fn test_count_query_format(){
+        let args = vec!["pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string()];
+        let count_clause = count_clause_formatter(&args);
+        assert!(count_clause == "=4");
+        let args = vec!["pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string(), "?".to_string()];
+        let count_clause = count_clause_formatter(&args);
+        assert!(count_clause == "=5");
+        let args = vec!["pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string(), "?*".to_string(), "?".to_string()];
+        let count_clause = count_clause_formatter(&args);
+        assert!(count_clause == ">=4");
+    }
+
+
+
+    #[test]
+    fn test_decay_query(){
+        let args = vec!["pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string()];
+        let decay = decay_query(&args).unwrap();
+        dbg!(&decay);
+    }
+
+    #[test]
+    fn test_get_inclusive_decays(){
+        let args = vec!["pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string()];
+        let candidates = get_all_possible_decays_inclusive(&args).unwrap();
+        dbg!(&candidates);
+        assert!(candidates.len() > 0);
+        
+    }
+
+    #[test]
+    fn test_get_extensive_decay(){
+        let args = vec!["pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string(), "?".to_string()];
+        let candidates = get_all_possible_decyas_extensive(&args, 
+            &vec!["S009.14".to_string(),
+                "S009.8".to_string(),
+                "S010.29".to_string(),
+                "S010.30".to_string(),
+                "S013.21".to_string(),
+                "S014.109".to_string(),
+                "S014.20".to_string(),
+                "S016.37".to_string(),
+                "S016.46".to_string(),
+                "S016.55".to_string(),
+                "S031.111".to_string(),
+                "S031.116".to_string(),
+                "S033.110".to_string(),
+                "S034.157".to_string(),
+                "S034.159".to_string(),
+                "S035.354".to_string(),
+                "S035.36".to_string(),
+                "S035.56".to_string(),
+                "S041.448".to_string(),
+                "S041.87".to_string(),
+                "S041.90".to_string(),
+                "S042.335".to_string()]);
+        assert!(candidates.unwrap().len() > 0);
+    }
+
 }
 
 #[cfg(test)]
