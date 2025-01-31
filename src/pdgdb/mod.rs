@@ -1,4 +1,4 @@
-use std::io::Error;
+use std::{collections::HashMap, io::Error};
 use rusqlite::Result;
 
 pub mod connection;
@@ -172,25 +172,24 @@ pub struct ParticleMeasurement
 
 #[derive(Debug)]
 pub struct DecayChannel{
-    pub parent: Particle,
-    pub daughters: Vec<(Particle, u16)>,
+    pub parent: String,
+    pub daughters: HashMap<String, u16>,
     pub pdgid: String,
 }
 
 impl DecayChannel{
     fn new(pdgid:String) -> DecayChannel{
         DecayChannel{
-            parent: Particle::default(),
-            daughters: Vec::new(),
+            parent: String::new(),
+            daughters: HashMap::new(),
             pdgid: pdgid,
         }
     }
 
-    fn add_daughter(&mut self, particle:Particle, multiplicity: u16){
-        self.daughters
-            .push((particle, multiplicity));
+    fn add_daughter(&mut self, particle:String, multiplicity: u16){
+        self.daughters.entry(particle).and_modify(|e| *e += multiplicity).or_insert(multiplicity);
     }
-    fn add_parent(&mut self, particle:Particle){
+    fn add_parent(&mut self, particle:String){
         self.parent = particle;
     }
 }

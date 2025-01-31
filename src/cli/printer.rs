@@ -1,6 +1,6 @@
-use crate::pdgdb::{Particle, ParticleDecay, ParticleMeasurement};
+use crate::pdgdb::{DecayChannel, Particle, ParticleDecay, ParticleMeasurement};
 
-pub fn basic_print(particle: &Particle) {
+pub fn single_particle_print(particle: &Particle) {
     println!("Particle Information:");
     println!("----------------------");
     println!("Name           : {}", particle.name.clone().unwrap_or("Unknown".to_string()));
@@ -67,7 +67,6 @@ fn print_measurement_info(measurement: &ParticleMeasurement) {
         measurement.minus_error.unwrap_or(0.0),
         display_power_of_ten,
     );
-
     println!(
         "{:<70} {:<30} {:<25} {:<15}",
         measurement.description.clone().unwrap_or("Unknown".to_string()),
@@ -75,6 +74,25 @@ fn print_measurement_info(measurement: &ParticleMeasurement) {
         value_with_error,
         measurement.unit_text.clone().unwrap_or("Unknown".to_string()),
     );
+}
+
+// Decay print
+pub fn decay_print(decay_channels: &Vec<DecayChannel>) {
+    println!("Related decay(s):");
+    println!("----------------------");
+    for decay in decay_channels {
+        print_decay_channel_info(decay);
+    }
+    println!("----------------------");
+    
+}
+fn print_decay_channel_info(decay: &DecayChannel) {
+    let mut daughter_format = Vec::new();
+    for (name, multiplicity) in decay.daughters.iter() {
+        daughter_format.push(format!("{}{}", multiplicity, name));
+    }
+    let daughter_format = daughter_format.join(" + ");
+    println!("{} -> {}", decay.parent, daughter_format);
 }
 
 #[cfg(test)]
@@ -88,7 +106,7 @@ mod test {
         let mut muon = Particle::test_muon();
         muon.find_decay(&conn);
         muon.find_measurement(&conn);
-        basic_print(&muon);
+        single_particle_print(&muon);
     }
 
 }

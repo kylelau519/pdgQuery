@@ -84,8 +84,6 @@ impl ParticleQuery{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pdgdb::connection::connect;
-
     #[test]
     fn test_get_particle_by_id() {  
         let query = ParticleQuery::new();

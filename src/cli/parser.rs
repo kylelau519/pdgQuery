@@ -15,7 +15,7 @@ pub enum QueryType{
 pub fn query_verify(args: &Vec<String>){
     let query = ParticleQuery::new();
     for name in args.iter(){
-        if name == &"pdgQuery" || name == &"?" || name == &"?*"{continue;}
+        if name == &"pdgQuery" || name == &"?" || name == &"?*" || name==&"->" || name=="-"{continue;}
         let particle = query.query(&name);
         match particle{
             Some(_) => continue,
@@ -24,7 +24,7 @@ pub fn query_verify(args: &Vec<String>){
     }
 }
 
-pub fn query_type_classifier(user_input: &Vec<String>) -> QueryType{
+pub fn query_type_classifier(user_input: &[String]) -> QueryType{
     if user_input.len() == 2 {
         return QueryType::SingleParticle;
     }
@@ -82,6 +82,16 @@ mod test {
         let user_input = vec!["pdgQuery".to_string(), "tau+".to_string(), "tau-".to_string()];
         assert_eq!(query_type_classifier(&user_input), QueryType::Unknown);
 
+        let user_input = vec!["pdgQuery".to_string(), "tau+".to_string(), "tau-".to_string(), "tau+".to_string()];
 
+    }
+
+    #[test]
+    fn test_query_verify(){
+        let user_input = vec!["pdgQuery".to_string(), "?".to_string(), "->".to_string(), "e+".to_string(), "nu_e".to_string(), "?*".to_string()];
+        query_verify(&user_input);
+
+        // let user_input = vec!["pdgQuery".to_string(), "tau+".to_string(), "tau-".to_string()];
+        // assert_eq!(std::panic::catch_unwind(|| query_verify(&user_input)).is_err(), true);
     }
 }

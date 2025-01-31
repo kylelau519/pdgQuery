@@ -1,7 +1,7 @@
 use std::{collections::{HashMap, HashSet}, fmt::format};
 
 use rusqlite::{Connection, Result};
-use crate::{cli::parser::{QueryType, query_type_classifier}, pdgdb::Particle};
+use crate::{cli::parser::{query_type_classifier, QueryType}, pdgdb::{DecayChannel, Particle}};
 
 use crate::pdgdb::connection::connect;
 
@@ -17,7 +17,7 @@ impl DecayQuery{
         }
     }
     
-    pub fn get_decays_inclusive(&self, args: &Vec<String>) -> Result<Vec<String>>{
+    pub fn get_decays_inclusive(&self, args: &[String]) -> Result<Vec<String>>{
         let where_clause = DecayQuery::where_clause_formatter(args);
         let query = format!(
             r#"SELECT DISTINCT pdgid FROM pdgdecay WHERE {where_clause}"#);
@@ -30,7 +30,7 @@ impl DecayQuery{
         Ok(pdgids)
     }
 
-    pub fn get_decays_extensive(&self, args: &Vec<String>) -> Result<Vec<String>>{
+    pub fn get_decays_extensive(&self, args: &[String]) -> Result<Vec<String>>{
         let pdgids = self.get_decays_inclusive(args)?;
         let count_clause = DecayQuery::count_clause_formatter(args);
         let mut query = format!(
@@ -57,7 +57,36 @@ impl DecayQuery{
         Ok(pdgids_passed.into_iter().collect::<Vec<String>>())
     }
 
-    fn where_clause_formatter(args: &Vec<String>) -> String{
+    pub fn get_decays_exact(&self, args: &[String]) -> Result<Vec<String>>{
+        let pdgids = self.get_decays_extensive(args)?;
+        let parent = args.iter().skip(1).take_while(|&item| item != "->").collect::<Vec<&String>>();
+        let mut query = format!(
+            r#"
+            SELECT 
+                *
+            FROM 
+                pdgdecay
+            WHERE 
+                pdgid = ?1
+            "#);
+
+        let mut pdgids_passed: HashSet<String> = HashSet::new();
+        for pdgid in pdgids{
+            let mut stmt = self.conn.prepare(&query)?;
+            let mut rows = stmt.query(&[&pdgid])?;
+            while let Some(row) = rows.next()?{
+                let pdgid: String = row.get("pdgid")?;
+                let is_outgoing: i32 = row.get("is_outgoing")?;
+                let name: String = row.get("name")?;
+                if is_outgoing == 0 && parent.contains(&&name){
+                    pdgids_passed.insert(pdgid);
+                }
+            }
+        }
+        Ok(pdgids_passed.into_iter().collect::<Vec<String>>())
+    }
+
+    fn where_clause_formatter(args: &[String]) -> String{
         let profile = DecayQuery::particles_dict(&DecayQuery::get_decay_products(args));
         let mut where_clause:Vec<String> = Vec::new();
         for (name, count) in profile{
@@ -67,7 +96,7 @@ impl DecayQuery{
             }
         where_clause.join(" AND ")
     }
-    fn count_clause_formatter(args: &Vec<String>) -> String{
+    fn count_clause_formatter(args: &[String]) -> String{
         let profile = DecayQuery::particles_dict(&DecayQuery::get_decay_products(args));
         let query_type = query_type_classifier(args);
         let num_particles: i32 = profile
@@ -93,13 +122,41 @@ impl DecayQuery{
         dict
     }
 
-    fn get_decay_products(args: &Vec<String>) -> Vec<&str>{
+    fn get_decay_products(args: &[String]) -> Vec<&str>{
         let decay_products = args
             .iter()
             .skip_while(|&item| item != "->")
             .skip(1)
             .collect::<Vec<&String>>();
         decay_products.iter().map(|item| item.as_str()).collect::<Vec<&str>>()
+    }
+
+    pub fn map_decay(&self, pdgid: &String) -> Result<DecayChannel>{
+        let query = format!(
+            r#"
+            SELECT 
+                *
+            FROM 
+                pdgdecay
+            WHERE 
+                pdgid = ?1
+            "#);
+        let mut stmt = self.conn.prepare(&query).unwrap();
+        let mut rows = stmt.query(&[&pdgid])?;
+        let mut decay_channel = DecayChannel::new(pdgid.to_string());
+        while let Some(row) = rows.next()?{
+            let name: String = row.get("name")?;
+            let multiplier: i32 = row.get("multiplier")?;
+            let is_outgoing: i32 = row.get("is_outgoing")?;
+
+            if is_outgoing == 1{
+                decay_channel.add_daughter(name, multiplier as u16);
+            }else{
+                decay_channel.add_parent(name);
+            }
+        }
+        Ok(decay_channel)
+
     }
 }
 
@@ -130,29 +187,19 @@ mod tests {
 
     #[test]
     fn test_count_query_format(){
-        let args = vec!["pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string()];
+        let args = vec!["pdgQuery".to_string(), "pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string()];
         let count_clause = DecayQuery::count_clause_formatter(&args);
         assert!(count_clause == "=4");
-        let args = vec!["pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string(), "?".to_string()];
+        let args = vec!["pdgQuery".to_string(), "pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string(), "?".to_string()];
         let count_clause = DecayQuery::count_clause_formatter(&args);
         assert!(count_clause == "=5");
-        let args = vec!["pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string(), "?*".to_string(), "?".to_string()];
+        let args = vec!["pdgQuery".to_string(), "pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string(), "?*".to_string(), "?".to_string()];
         let count_clause = DecayQuery::count_clause_formatter(&args);
         assert!(count_clause == ">=4");
     }
-
-
-
-    // #[test]
-    // fn test_decay_query(){
-    //     let args = vec!["pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string()];
-    //     let decay = decay_query(&args).unwrap();
-    //     dbg!(&decay);
-    // }
-
     #[test]
     fn test_get_inclusive_decays(){
-        let args = vec!["pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string()];
+        let args = vec!["pdgQuery".to_string(), "pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string()];
         let mut query = DecayQuery::new();
         let candidates = query.get_decays_inclusive(&args).unwrap();
         dbg!(&candidates);
@@ -162,32 +209,19 @@ mod tests {
 
     #[test]
     fn test_get_extensive_decay(){
-        let args = vec!["pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string(), "?".to_string()];
+        let args = vec!["pdgQuery".to_string(), "pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string(), "?".to_string()];
         let mut query = DecayQuery::new();
         let candidates = query.get_decays_extensive(&args);
-            // &vec!["S009.14".to_string(),
-            //     "S009.8".to_string(),
-            //     "S010.29".to_string(),
-            //     "S010.30".to_string(),
-            //     "S013.21".to_string(),
-            //     "S014.109".to_string(),
-            //     "S014.20".to_string(),
-            //     "S016.37".to_string(),
-            //     "S016.46".to_string(),
-            //     "S016.55".to_string(),
-            //     "S031.111".to_string(),
-            //     "S031.116".to_string(),
-            //     "S033.110".to_string(),
-            //     "S034.157".to_string(),
-            //     "S034.159".to_string(),
-            //     "S035.354".to_string(),
-            //     "S035.36".to_string(),
-            //     "S035.56".to_string(),
-            //     "S041.448".to_string(),
-            //     "S041.87".to_string(),
-            //     "S041.90".to_string(),
-            //     "S042.335".to_string()]);
+        dbg!(&candidates);
         assert!(candidates.unwrap().len() > 0);
     }
 
+    #[test]
+    fn test_get_exact_decay(){
+        let args = vec!["pdgQuery".to_string(), "pi+".to_string(), "->".to_string(), "mu+".to_string(), "?".to_string()];
+        let mut query = DecayQuery::new();
+        let candidates = query.get_decays_exact(&args);
+        dbg!(&candidates);
+        // assert!(candidates.unwrap().len() > 0);
+    }
 }
