@@ -9,10 +9,7 @@ use cli::printer::{decay_print, single_particle_print};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    for arg in args.iter(){
-        println!("{}", arg);
-    }
-    // query_verify(&args);
+    query_verify(&args);
     let query_type = query_type_classifier(&args);
     let single_query = ParticleQuery::new();
     let decay_query = DecayQuery::new();

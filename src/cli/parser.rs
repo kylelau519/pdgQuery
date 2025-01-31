@@ -15,7 +15,7 @@ pub enum QueryType{
 pub fn query_verify(args: &Vec<String>){
     let query = ParticleQuery::new();
     for name in args.iter(){
-        if name == &"pdgQuery" || name == &"?" || name == &"?*" || name==&"->" || name=="-"{continue;}
+        if name == &"pdgQuery" || name == &"_" || name == &"_*" || name==&"-to-" || name=="-"{continue;}
         let particle = query.query(&name);
         match particle{
             Some(_) => continue,
@@ -28,21 +28,21 @@ pub fn query_type_classifier(user_input: &[String]) -> QueryType{
     if user_input.len() == 2 {
         return QueryType::SingleParticle;
     }
-    else if user_input.contains(&"->".to_string())
+    else if user_input.contains(&"-to-".to_string())
     {
-        if user_input.iter().any(|item| item == "?*")
+        if user_input.iter().any(|item| item == "_*")
         {
             return QueryType::DecayWithWildcard;
         }
         let decay_products = user_input
             .iter()
-            .skip_while(|&item| item != "->")
+            .skip_while(|&item| item != "-to-")
             .skip(1)
             .collect::<Vec<&String>>();
 
         let parent = user_input.iter().nth(1).unwrap();
-        let is_exact_parent = parent != "?";
-        let is_exact_daughter = decay_products.iter().all(|&item| item != "?");
+        let is_exact_parent = parent != "_";
+        let is_exact_daughter = decay_products.iter().all(|&item| item != "_");
 
         match (is_exact_parent, is_exact_daughter){
             (true, true) => return QueryType::ExactDecay,
@@ -64,19 +64,19 @@ mod test {
         let user_input = vec!["pdgQuery".to_string(), "tau+".to_string()];
         assert_eq!(query_type_classifier(&user_input), QueryType::SingleParticle);
 
-        let user_input = vec!["pdgQuery".to_string(), "Z".to_string(), "->".to_string(), "e".to_string(), "e".to_string()];
+        let user_input = vec!["pdgQuery".to_string(), "Z".to_string(), "-to-".to_string(), "e".to_string(), "e".to_string()];
         assert_eq!(query_type_classifier(&user_input), QueryType::ExactDecay);
 
-        let user_input = vec!["pdgQuery".to_string(), "Z".to_string(), "->".to_string(), "e".to_string(), "?".to_string()];
+        let user_input = vec!["pdgQuery".to_string(), "Z".to_string(), "-to-".to_string(), "e".to_string(), "_".to_string()];
         assert_eq!(query_type_classifier(&user_input), QueryType::PartialDecay);
 
-        let user_input = vec!["pdgQuery".to_string(), "?".to_string(), "->".to_string(), "e".to_string(), "e".to_string()];
+        let user_input = vec!["pdgQuery".to_string(), "_".to_string(), "-to-".to_string(), "e".to_string(), "e".to_string()];
         assert_eq!(query_type_classifier(&user_input), QueryType::ParentlessDecayExact);
 
-        let user_input = vec!["pdgQuery".to_string(), "?".to_string(), "->".to_string(), "e".to_string(), "?".to_string(), "?".to_string()];
+        let user_input = vec!["pdgQuery".to_string(), "_".to_string(), "-to-".to_string(), "e".to_string(), "_".to_string(), "_".to_string()];
         assert_eq!(query_type_classifier(&user_input), QueryType::ParentlessDecayPartial);
 
-        let user_input = vec!["pdgQuery".to_string(), "?".to_string(), "->".to_string(), "e".to_string(), "nu_e".to_string(), "?*".to_string()];
+        let user_input = vec!["pdgQuery".to_string(), "_".to_string(), "-to-".to_string(), "e".to_string(), "nu_e".to_string(), "_*".to_string()];
         assert_eq!(query_type_classifier(&user_input), QueryType::DecayWithWildcard);
 
         let user_input = vec!["pdgQuery".to_string(), "tau+".to_string(), "tau-".to_string()];
@@ -88,7 +88,7 @@ mod test {
 
     #[test]
     fn test_query_verify(){
-        let user_input = vec!["pdgQuery".to_string(), "?".to_string(), "->".to_string(), "e+".to_string(), "nu_e".to_string(), "?*".to_string()];
+        let user_input = vec!["pdgQuery".to_string(), "_".to_string(), "-to-".to_string(), "e+".to_string(), "nu_e".to_string(), "_*".to_string()];
         query_verify(&user_input);
 
         // let user_input = vec!["pdgQuery".to_string(), "tau+".to_string(), "tau-".to_string()];

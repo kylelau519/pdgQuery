@@ -59,7 +59,7 @@ impl DecayQuery{
 
     pub fn get_decays_exact(&self, args: &[String]) -> Result<Vec<String>>{
         let pdgids = self.get_decays_extensive(args)?;
-        let parent = args.iter().skip(1).take_while(|&item| item != "->").collect::<Vec<&String>>();
+        let parent = args.iter().skip(1).take_while(|&item| item != "-to-").collect::<Vec<&String>>();
         let mut query = format!(
             r#"
             SELECT 
@@ -90,7 +90,7 @@ impl DecayQuery{
         let profile = DecayQuery::particles_dict(&DecayQuery::get_decay_products(args));
         let mut where_clause:Vec<String> = Vec::new();
         for (name, count) in profile{
-            if name == "?*" || name == "?"{ continue; }
+            if name == "_*" || name == "_"{ continue; }
             where_clause.push(format!(
                 "pdgid IN (SELECT pdgid FROM pdgdecay WHERE name = '{}' AND multiplier = {} AND is_outgoing = 1)", name, count));
             }
@@ -101,7 +101,7 @@ impl DecayQuery{
         let query_type = query_type_classifier(args);
         let num_particles: i32 = profile
             .iter()
-            .filter(|(name, _count)| *name != &"?*")
+            .filter(|(name, _count)| *name != &"_*")
             .map(|(_name, count)| count)
             .sum();
         match query_type {
@@ -125,7 +125,7 @@ impl DecayQuery{
     fn get_decay_products(args: &[String]) -> Vec<&str>{
         let decay_products = args
             .iter()
-            .skip_while(|&item| item != "->")
+            .skip_while(|&item| item != "-to-")
             .skip(1)
             .collect::<Vec<&String>>();
         decay_products.iter().map(|item| item.as_str()).collect::<Vec<&str>>()
@@ -170,7 +170,7 @@ mod tests {
     #[test]
     fn test_where_query_format(){
         let conn = connect().unwrap();
-        let args = vec!["pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string()];
+        let args = vec!["pi+".to_string(), "-to-".to_string(), "mu+".to_string(), "e-".to_string(), "_".to_string()];
         let where_clause = DecayQuery::where_clause_formatter(&args);
         dbg!(&where_clause);
         let query = format!(
@@ -187,19 +187,19 @@ mod tests {
 
     #[test]
     fn test_count_query_format(){
-        let args = vec!["pdgQuery".to_string(), "pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string()];
+        let args = vec!["pdgQuery".to_string(), "pi+".to_string(), "-to-".to_string(), "mu+".to_string(), "e-".to_string(), "_".to_string()];
         let count_clause = DecayQuery::count_clause_formatter(&args);
         assert!(count_clause == "=4");
-        let args = vec!["pdgQuery".to_string(), "pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string(), "?".to_string()];
+        let args = vec!["pdgQuery".to_string(), "pi+".to_string(), "-to-".to_string(), "mu+".to_string(), "e-".to_string(), "_".to_string(), "_".to_string()];
         let count_clause = DecayQuery::count_clause_formatter(&args);
         assert!(count_clause == "=5");
-        let args = vec!["pdgQuery".to_string(), "pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string(), "?*".to_string(), "?".to_string()];
+        let args = vec!["pdgQuery".to_string(), "pi+".to_string(), "-to-".to_string(), "mu+".to_string(), "e-".to_string(), "_".to_string(), "_*".to_string(), "_".to_string()];
         let count_clause = DecayQuery::count_clause_formatter(&args);
         assert!(count_clause == ">=4");
     }
     #[test]
     fn test_get_inclusive_decays(){
-        let args = vec!["pdgQuery".to_string(), "pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string()];
+        let args = vec!["pdgQuery".to_string(), "pi+".to_string(), "-to-".to_string(), "mu+".to_string(), "e-".to_string()];
         let mut query = DecayQuery::new();
         let candidates = query.get_decays_inclusive(&args).unwrap();
         dbg!(&candidates);
@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn test_get_extensive_decay(){
-        let args = vec!["pdgQuery".to_string(), "pi+".to_string(), "->".to_string(), "mu+".to_string(), "e-".to_string(), "?".to_string(), "?".to_string()];
+        let args = vec!["pdgQuery".to_string(), "pi+".to_string(), "-to-".to_string(), "mu+".to_string(), "e-".to_string(), "_".to_string(), "_".to_string()];
         let mut query = DecayQuery::new();
         let candidates = query.get_decays_extensive(&args);
         dbg!(&candidates);
@@ -218,7 +218,7 @@ mod tests {
 
     #[test]
     fn test_get_exact_decay(){
-        let args = vec!["pdgQuery".to_string(), "pi+".to_string(), "->".to_string(), "mu+".to_string(), "?".to_string()];
+        let args = vec!["pdgQuery".to_string(), "pi+".to_string(), "-to-".to_string(), "mu+".to_string(), "_".to_string()];
         let mut query = DecayQuery::new();
         let candidates = query.get_decays_exact(&args);
         dbg!(&candidates);
