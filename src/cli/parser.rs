@@ -8,6 +8,7 @@ pub enum QueryType{
     ParentlessDecayExact,  // Query for exact decay with no parent specified, e.g., `pdgQuery ? -> e e`
     ParentlessDecayPartial, // Query for decays with no parent specified, e.g., `pdgQuery ? -> e ? ?`
     DecayWithWildcard,     // Query for decays with wildcard matching, e.g., `pdgQuery ? -> e nu_e ?*`
+    ParentlessDecayWildcard,     // Query for decays with wildcard matching, e.g., `pdgQuery ? -> e nu_e ?*`
     // PhysicalPropertySearch, // Query for particles matching specific physical properties
     Unknown,               // Unknown query type
 }

@@ -7,7 +7,6 @@ pub fn connect() -> Result<Connection, Box<dyn std::error::Error>> {
     from_path(&dotenv_path).ok();
 
     let pdgdb = std::env::var("PDGDB_PATH").unwrap();
-    println!("{}",&pdgdb);
     let conn = Connection::open(pdgdb)?;
     Ok(conn)
 }
