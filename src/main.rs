@@ -17,7 +17,7 @@ fn main() {
         .collect();
 
     let args = _args.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
-    query_verify(&args)?;
+    // query_verify(&args)?;
 
     let query_type = query_type_classifier(&args);
     let single_query = ParticleQuery::new();
