@@ -8,14 +8,23 @@ use cli::parser::{query_type_classifier, query_verify, QueryType};
 use cli::printer::{decay_print, single_particle_print};
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let _args: Vec<String> = env::args()
+        .skip(1)
+        .collect::<Vec<String>>()
+        .join(" ")
+        .split_whitespace()
+        .map(|s| s.to_string())
+        .collect();
+    let args = _args.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
+
+
     query_verify(&args);
     let query_type = query_type_classifier(&args);
     let single_query = ParticleQuery::new();
     let decay_query = DecayQuery::new();
     match query_type{
         QueryType::SingleParticle => {
-            let query = &args[1];
+            let query = &args[0];
             let mut particle = single_query.query(&query).unwrap();
             single_particle_print(&particle);
         },
@@ -34,8 +43,9 @@ fn main() {
                 .map_decay(pdgid).unwrap())
                 .collect::<Vec<_>>();
             decay_print(&decay_channels);
-        }
-        QueryType::DecayWithWildcard => {
+        },
+        QueryType::ParentlessDecayWildcard => todo!(),
+        QueryType::DecayWildcard => {
             let pdgids = decay_query.get_decays_inclusive(&args).unwrap();
             let decay_channels = pdgids.iter()
                 .map(|pdgid| decay_query

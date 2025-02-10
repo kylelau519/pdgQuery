@@ -1,5 +1,5 @@
 use rusqlite::Connection;
-use dotenv::{dotenv, from_path};
+use dotenv::from_path;
 
 pub fn connect() -> Result<Connection, Box<dyn std::error::Error>> {
     let cargo_dir = env!("CARGO_MANIFEST_DIR");
