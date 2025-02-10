@@ -30,6 +30,35 @@ impl DecayQuery{
         Ok(pdgids)
     }
 
+    pub fn get_decays_inclusive_with_parent(&self, args: &[&str]) -> Result<Vec<String>>{
+        let pdgids = self.get_decays_inclusive(args)?;
+        let parent = args.iter().take_while(|&&item| item != "->").collect::<Vec<_>>();
+        let mut query = format!(
+            r#"
+            SELECT 
+                *
+            FROM 
+                pdgdecay
+            WHERE 
+                pdgid = ?1
+            "#);
+            let mut pdgids_passed: HashSet<String> = HashSet::new();
+            for pdgid in pdgids{
+                let mut stmt = self.conn.prepare(&query)?;
+                let mut rows = stmt.query(&[&pdgid])?;
+                while let Some(row) = rows.next()?{
+                    let pdgid: String = row.get("pdgid")?;
+                    let is_outgoing: i32 = row.get("is_outgoing")?;
+                    let name: String = row.get("name")?;
+                    if is_outgoing == 0 && parent.contains(&&name.as_str()){
+                        pdgids_passed.insert(pdgid);
+                    }
+                }
+            }
+            Ok(pdgids_passed.into_iter().collect::<Vec<String>>())
+  
+    }
+
     pub fn get_decays_extensive(&self, args: &[&str]) -> Result<Vec<String>>{
         let pdgids = self.get_decays_inclusive(args)?;
         let count_clause = DecayQuery::count_clause_formatter(args);

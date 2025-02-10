@@ -15,10 +15,10 @@ fn main() {
         .split_whitespace()
         .map(|s| s.to_string())
         .collect();
+
     let args = _args.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
+    query_verify(&args)?;
 
-
-    query_verify(&args);
     let query_type = query_type_classifier(&args);
     let single_query = ParticleQuery::new();
     let decay_query = DecayQuery::new();
@@ -44,8 +44,15 @@ fn main() {
                 .collect::<Vec<_>>();
             decay_print(&decay_channels);
         },
-        QueryType::ParentlessDecayWildcard => todo!(),
         QueryType::DecayWildcard => {
+            let pdgids = decay_query.get_decays_inclusive_with_parent(&args).unwrap();
+            let decay_channels = pdgids.iter()
+                .map(|pdgid| decay_query
+                .map_decay(pdgid).unwrap())
+                .collect::<Vec<_>>();
+            decay_print(&decay_channels);
+        }
+        QueryType::ParentlessDecayWildcard => {
             let pdgids = decay_query.get_decays_inclusive(&args).unwrap();
             let decay_channels = pdgids.iter()
                 .map(|pdgid| decay_query
@@ -53,7 +60,7 @@ fn main() {
                 .collect::<Vec<_>>();
             decay_print(&decay_channels);
         },
-        QueryType::Unknown => panic!("Unknown query type"),
+        QueryType::Unknown => panic!("Unknown query type, make for decay make sure you have double quote pdgQuery \"A -> B C D\" or for single particle pdgQuery \"A\""),
     }
 
 }

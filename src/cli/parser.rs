@@ -13,16 +13,30 @@ pub enum QueryType{
     Unknown,               // Unknown query type
 }
 
-pub fn query_verify(args: &[&str]){
+#[derive(Debug)]
+pub struct QueryError(String);
+impl std::fmt::Display for QueryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Query Error: {}", self.0)
+    }
+}
+impl std::error::Error for QueryError {}
+
+pub fn query_verify(args: &[&str]) -> Result<(), QueryError> {
     let query = ParticleQuery::new();
-    for name in args.iter(){
-        if *name == "pdgQuery" || *name == "?" || *name == "?*" || *name=="->"{continue;}
+    
+    for name in args.iter() {
+        if *name == "pdgQuery" || *name == "?" || *name == "?*" || *name == "->" {
+            continue;
+        }
+        
         let particle = query.query(name);
-        match particle{
+        match particle {
             Some(_) => continue,
-            None => panic!("Particle {} not found in the database", name),
+            None => return Err(QueryError(format!("Particle {} not found in the database; or make sure you have double quote pdgQuery \"A -> B C D \".", name))),
         }
     }
+    Ok(()) // If all queries succeed, return Ok
 }
 
 pub fn query_type_classifier(user_input: &[&str]) -> QueryType{
@@ -101,7 +115,7 @@ mod test {
 
     #[test]
     fn test_query_verify(){
-        let user_input = vec!["pdgQuery", "?", "->", "e+", "nu_e", "?*"];
+        let user_input = vec!["?", "->", "e+", "nu_e", "?*"];
         query_verify(&user_input);
     }
 }

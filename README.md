@@ -17,9 +17,9 @@ Querying by name/name alias/pdgid/node id
 - It aims to provide very rich information including the error of the latest measurement given by the PDG group.
 
 Querying by decays, Query characters has been changed due to conflict with special treatment on ? and > in terminal.
-- pdgQuery ~~? -> ee~~, _ -to- e+ e- returns particles that has dielectron decay ✔️
-- pdgQuery ~~? -> e ? ?~~, _ -to- e+ _ _ returns particle decay channels that decay into one electron and two other particles ✔️
-- pdgQuery ~~? -> e nu_e ?*~~ _ -to- e+ nu_e ?_ returns particle decays that contains electron and electron neutrino ✔️
+- pdgQuery "? -> e+e-" returns particles that has dielectron decay ✔️
+- pdgQuery "? -> e ? ?" returns particle decay channels that decay into one electron and two other particles ✔️
+- pdgQuery "? -> e nu_e ?*" returns particle decays that contains electron and electron neutrino ✔️
 
 Currently the package work as expected, however, due to the inconsistent formatting in the database user may not find all the relevant results they wanted.
 This will be the next objective to extend the functionality.
