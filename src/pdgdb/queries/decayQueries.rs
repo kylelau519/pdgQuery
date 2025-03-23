@@ -7,20 +7,19 @@ use crate::pdgdb::connection::connect;
 
 
 pub struct DecayQuery{
-    conn: Connection
+    conn: Connection,
 }
 
 impl DecayQuery{
-    pub fn new()->Self{
+    pub fn new() -> Self{
         DecayQuery{
-            conn: connect().unwrap(),
+            conn: connect().expect("Error connecting to database"),
         }
     }
     
     pub fn get_decays_inclusive(&self, args: &[&str]) -> Result<Vec<String>>{
         let where_clause = DecayQuery::where_clause_formatter(args);
-        let query = format!(
-            r#"SELECT DISTINCT pdgid FROM pdgdecay WHERE {where_clause}"#);
+        let query = format!("SELECT DISTINCT pdgid FROM pdgdecay WHERE {}", where_clause);
         let mut stmt = self.conn.prepare(&query)?;
         let mut rows = stmt.query([])?;
         let mut pdgids: Vec<String> = Vec::new();
@@ -33,7 +32,7 @@ impl DecayQuery{
     pub fn get_decays_inclusive_with_parent(&self, args: &[&str]) -> Result<Vec<String>>{
         let pdgids = self.get_decays_inclusive(args)?;
         let parent = args.iter().take_while(|&&item| item != "->").collect::<Vec<_>>();
-        let mut query = format!(
+        let query = format!(
             r#"
             SELECT 
                 *
@@ -56,13 +55,12 @@ impl DecayQuery{
                 }
             }
             Ok(pdgids_passed.into_iter().collect::<Vec<String>>())
-  
     }
 
     pub fn get_decays_extensive(&self, args: &[&str]) -> Result<Vec<String>>{
         let pdgids = self.get_decays_inclusive(args)?;
         let count_clause = DecayQuery::count_clause_formatter(args);
-        let mut query = format!(
+        let query = format!(
             r#"
             SELECT 
                 *
@@ -70,8 +68,7 @@ impl DecayQuery{
                 pdgdecay
             WHERE 
                 pdgid = ?1
-            AND
-                (SELECT COUNT(*) FROM pdgdecay WHERE pdgid = ?1){}
+            AND (SELECT COUNT(*) FROM pdgdecay WHERE pdgid = ?1){}
             "#, count_clause);
 
         let mut pdgids_passed: HashSet<String> = HashSet::new();
@@ -89,7 +86,7 @@ impl DecayQuery{
     pub fn get_decays_exact(&self, args: &[&str]) -> Result<Vec<String>>{
         let pdgids = self.get_decays_extensive(args)?;
         let parent = args.iter().take_while(|&&item| item != "->").collect::<Vec<_>>();
-        let mut query = format!(
+        let query = format!(
             r#"
             SELECT 
                 *

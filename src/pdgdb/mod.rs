@@ -51,7 +51,8 @@ impl Particle{
                 pdgdata.display_value_text,
                 pdgdata.value,
                 pdgdata.error_positive AS plus_error,
-                pdgdata.error_negative AS minus_error
+                pdgdata.error_negative AS minus_error,
+                pdgdata.limit_type
             FROM
                 pdgid
             INNER JOIN
@@ -73,6 +74,7 @@ impl Particle{
                 value: row.get("value")?,
                 plus_error: row.get("plus_error")?,
                 minus_error: row.get("minus_error")?,
+                limit_type: row.get("limit_type")?,
             })
         }).unwrap().collect::<Result<Vec<ParticleDecay>>>().unwrap();
         decay_data.sort_by_key(|decay| decay.mode_number );
@@ -118,7 +120,7 @@ impl Particle{
                 pdgid.pdgid NOT LIKE ?2
             "#,
         ).unwrap();
-        let mut measurement_data = stmt.query_map(&[&search_node_id, &avoid_decay_node], |row|{
+        let measurement_data = stmt.query_map(&[&search_node_id, &avoid_decay_node], |row|{
             Ok(ParticleMeasurement{
                 node_id: row.get("pdgid")?,
                 description: row.get("description")?,
@@ -148,17 +150,15 @@ pub struct ParticleDecay
     pub value: Option<f64>, // value in pdgdata
     pub plus_error: Option<f64>, // error_positive in pdgdata,
     pub minus_error: Option<f64>, // error_negative in pdgdata
-    // pub limit_type: Option<String>, // limit_type in pdgdata
+    pub limit_type: Option<String>, // limit_type in pdgdata
 }
 
 #[derive(Debug)]
 pub struct ParticleMeasurement
 {
     pub node_id: Option<String>, // pdgid in the databases, S003M for electron mass
-    
     pub description: Option<String>, // description in pdgid
     pub data_type: Option<String>, // data_type in pdgid
-
     pub value: Option<f64>, // value in pdgdata
     pub display_value: Option<String>, // display_value in pdgdata
     pub display_power_of_ten: Option<i64>, // display_order in pdgdata

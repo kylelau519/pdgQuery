@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 dotenv = "0.15.0"
 rusqlite = "0.32.1"
+textwrap = "0.16.2"

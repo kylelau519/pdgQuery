@@ -28,7 +28,7 @@ impl ParticleQuery{
     }
 
     fn get_by_id(&self, pdgid: i64) -> Result<Particle> {
-        let mut stmt = &mut self.conn.prepare("SELECT * FROM pdgparticle WHERE mcid = ?1")?;
+        let stmt = &mut self.conn.prepare("SELECT * FROM pdgparticle WHERE mcid = ?1")?;
         // This line is very complicated,
         // First &[&pdgid] is the params substitution for the ?1 in the query
         // If our query is "SELECT * FROM pdgparticle WHERE mcid = ?1 AND name = ?2", we would have &[&pdgid, &name]
@@ -57,7 +57,7 @@ impl ParticleQuery{
     }
 
     fn map_particle(row: &rusqlite::Row) -> Result<Particle> {
-    let mut particle = Particle {
+    let particle = Particle {
         name: row.get("name")?,
         id: row.get("id")?,
         alias: None,

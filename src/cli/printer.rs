@@ -1,4 +1,10 @@
 use crate::pdgdb::{DecayChannel, Particle, ParticleDecay, ParticleMeasurement};
+use crate::cli::printAlias::QueryAlias;
+use textwrap;
+use std::sync::OnceLock;
+
+static QUERY_ALIAS: OnceLock<QueryAlias> = OnceLock::new();
+
 
 pub fn single_particle_print(particle: &Particle) {
     println!("Particle Information:");
@@ -34,22 +40,53 @@ pub fn single_particle_print(particle: &Particle) {
 }
 fn print_decay_header() {
     println!(
-        "{:<30} {:<20} {:<10} {:<15}",
-        "Decay", "Display Value", "Value", "(+Error, -Error)"
+        "{:<40} {:<20} {:<10}",
+        "Decay", "Value", "(+Error, -Error)"
     );
     println!("{}", "-".repeat(80));
 }
 
 fn print_decay_info(decay: &ParticleDecay) {
-    println!(
-        "{:30} {:20} {:10.5} (+{:.5}, -{:.5})",
-        decay.description.clone().unwrap_or("Unknown".to_string()),
-        decay.display_value.clone().unwrap_or("Unknown".to_string()),
-        decay.value.unwrap_or(0.0),
-        decay.plus_error.unwrap_or(0.0),
-        decay.minus_error.unwrap_or(0.0),
-    );
+    let alias = QUERY_ALIAS.get_or_init(|| QueryAlias::new());
+    let display_value = match decay.limit_type.as_deref() {
+        Some("U") => format!("<{:.2e}", decay.value.unwrap_or(f64::NAN)),
+        Some("L") => format!(">{:.2e}", decay.value.unwrap_or(f64::NAN)),
+        _ => {
+            if decay.value.is_some() {
+                format!("{:.2e}", decay.value.unwrap())
+            } 
+            else if decay.display_value.is_some() {
+                decay.display_value.clone().unwrap()
+            }
+            else {
+                "N/A".to_string()
+            }
+        },
+    };
+    let description = {
+        let mut description = decay.description.clone().unwrap_or("Unknown".to_string());
+            for (name, symbol) in alias.particle_display_aliases.iter() {
+                description = description.replace(name, symbol);
+            }
+            description = textwrap::fill(&description, 70);
+            description
+        };
+    let lines: Vec<&str> = description.split('\n').collect();
+    for (i, line) in lines.iter().enumerate() {
+        if i == 0 {
+            println!(
+                "{:<40} {:<20}  (+{:.2e}, -{:.2e})",
+                line,
+                display_value.clone(),
+                decay.plus_error.map_or(f64::NAN, |x| if x==0.0 {f64::NAN} else {x}),
+                decay.minus_error.map_or(f64::NAN, |x| if x==0.0 {f64::NAN} else {x}),
+            );
+        } else {
+            println!("{:<40}", line);
+        }
+    }
 }
+
 fn print_measurement_header() {
     println!(
         "{:<70} {:<30} {:<35} {:<12}",
@@ -63,17 +100,36 @@ fn print_measurement_info(measurement: &ParticleMeasurement) {
     let value_with_error = format!(
         "{:.5} (+{:.5}, -{:.5}) x 10^{}",
         measurement.value.unwrap_or(0.0),
-        measurement.plus_error.unwrap_or(0.0),
-        measurement.minus_error.unwrap_or(0.0),
+        measurement.plus_error.unwrap_or(f64::NAN),
+        measurement.minus_error.unwrap_or(f64::NAN),
         display_power_of_ten,
     );
-    println!(
-        "{:<70} {:<30} {:<25} {:<15}",
-        measurement.description.clone().unwrap_or("Unknown".to_string()),
-        measurement.display_value.clone().unwrap_or("Unknown".to_string()),
-        value_with_error,
-        measurement.unit_text.clone().unwrap_or("Unknown".to_string()),
-    );
+    let alias = QUERY_ALIAS.get_or_init(|| QueryAlias::new());
+    let description = {
+        let mut description = measurement.description.clone().unwrap_or("Unknown".to_string());
+            for (name, symbol) in alias.particle_display_aliases.iter() {
+                description = description.replace(name, symbol);
+            }
+            description = textwrap::fill(&description, 70);
+            description
+        };
+    let lines: Vec<&str> = description.split('\n').collect();
+
+
+    for (i, line) in lines.iter().enumerate() {
+        if i == 0 {
+            let unit_text = measurement.unit_text.as_deref();
+            let unit = alias.unit_aliases.get(unit_text.unwrap_or_default());
+            println!( "{:<70} {:<30} {:<25} {:<15}",
+                line,
+                measurement.display_value.as_deref().unwrap_or("Unknown"),
+                value_with_error,
+                unit.unwrap_or(&String::from("")),
+            );
+        } else {
+            println!("{:<70}", line);
+        }
+    }
 }
 
 // Decay print
@@ -99,7 +155,6 @@ fn print_decay_channel_info(decay: &DecayChannel) {
 mod test {
     use super::*;
     use crate::pdgdb::connection::connect;
-
     #[test]
     fn test_basic_print() {
         let conn = connect().unwrap();
