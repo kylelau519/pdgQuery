@@ -47,7 +47,6 @@ fn print_decay_header() {
 }
 
 fn print_decay_info(decay: &ParticleDecay) {
-    let alias = QUERY_ALIAS.get_or_init(|| QueryAlias::new());
     let display_value = match decay.limit_type.as_deref() {
         Some("U") => format!("<{:.2e}", decay.value.unwrap_or(f64::NAN)),
         Some("L") => format!(">{:.2e}", decay.value.unwrap_or(f64::NAN)),
@@ -63,21 +62,15 @@ fn print_decay_info(decay: &ParticleDecay) {
             }
         },
     };
-    let description = {
-        let mut description = decay.description.clone().unwrap_or("Unknown".to_string());
-            for (name, symbol) in alias.particle_display_aliases.iter() {
-                description = description.replace(name, symbol);
-            }
-            description = textwrap::fill(&description, 70);
-            description
-        };
+
+    let description = format_description(&decay.description);
     let lines: Vec<&str> = description.split('\n').collect();
     for (i, line) in lines.iter().enumerate() {
         if i == 0 {
             println!(
                 "{:<40} {:<20}  (+{:.2e}, -{:.2e})",
                 line,
-                display_value.clone(),
+                display_value.as_str(),
                 decay.plus_error.map_or(f64::NAN, |x| if x==0.0 {f64::NAN} else {x}),
                 decay.minus_error.map_or(f64::NAN, |x| if x==0.0 {f64::NAN} else {x}),
             );
@@ -89,109 +82,113 @@ fn print_decay_info(decay: &ParticleDecay) {
 
 fn print_measurement_header() {
     println!(
-        "{:<70} {:<30} {:<35} {:<12}",
-        "Description", "Display Value", "Value (±Error)", "Unit"
+        "{:<70} {:<30} {:<15} {:<15} {:<15}",
+        // "{:<70} {:<30} {:<40} {:<12}",
+        "Description", "Rounded Value", "Unit", "Precise Value", "(+Error, -Error)"
     );
-    println!("{}", "-".repeat(150));
+    println!("{}", "-".repeat(180));
 }
 
+
+
 fn print_measurement_info(measurement: &ParticleMeasurement) {
-    let simplified_value: String = {
-        let text = match measurement.limit_type.as_deref() {
-            Some("U") => format!("<{:.4} x E{:2}", measurement.value.unwrap_or(f64::NAN) / 10.0_f64.powi(measurement.value.unwrap_or(f64::NAN).abs().log10().floor() as i32), measurement.value.unwrap_or(f64::NAN).abs().log10().floor() as i32),
-            Some("L") => format!(">{:.4} x E{:2}", measurement.value.unwrap_or(f64::NAN) / 10.0_f64.powi(measurement.value.unwrap_or(f64::NAN).abs().log10().floor() as i32), measurement.value.unwrap_or(f64::NAN).abs().log10().floor() as i32),
-            Some("R") => format!(
-                "{:.4e} to {:.4e}", 
-                measurement.value.unwrap_or(f64::NAN)+measurement.plus_error.unwrap_or(f64::NAN),
-                measurement.value.unwrap_or(f64::NAN)-measurement.minus_error.unwrap_or(f64::NAN),
-            ),
-            _ => {
-                let value = measurement.value.unwrap_or(f64::NAN);
-                let plus_error = measurement.plus_error.unwrap_or(f64::NAN);
-                let minus_error = measurement.minus_error.unwrap_or(f64::NAN);
-                let value_order = value.abs().log10().floor() as i32;
-                let plus_order = plus_error.abs().log10().floor() as i32;
-                let minus_order = minus_error.abs().log10().floor() as i32;
-                if (plus_error - minus_error).abs() < f64::EPSILON * plus_error.abs() {
-                    // Case 1: Symmetric errors
-                    let value_order = if value != 0.0 { value.abs().log10().floor() as i32 } else { 0 };
-                    if value_order == 0 {
-                        format!("({:.4} ± {:.4})", value, plus_error)
-                    }
-                    else {
-                        format!("({:.4} ± {:.4}) × E{}", 
-                            value / 10.0_f64.powi(value_order),
-                            plus_error / 10.0_f64.powi(value_order),
-                            value_order)
-                    }
-                }
-                else if value != 0.0 && plus_error != 0.0 && minus_error != 0.0 {
-                    // Check if orders of magnitude are close enough for case 2
-                    if (value_order - plus_order).abs() < 3 && (value_order - minus_order).abs() < 3 
-                    {
-                        // Case 2: Show with same exponent
-                        format!("({:.4} +{:.4} -{:.4}) x E{}", 
-                            value / 10.0_f64.powi(value_order),
-                            plus_error / 10.0_f64.powi(value_order),
-                            minus_error / 10.0_f64.powi(value_order),
-                            value_order)
-                    }
-                    else {
-                        // Case 3: Show separately
-                        format!("{}E{} (+{}E{}, -{}E{})", 
-                            (value / 10.0_f64.powi(value_order)).round() / 1000.0 * 1000.0,
-                            value_order,
-                            (plus_error / 10.0_f64.powi(plus_order)).round() / 1000.0 * 1000.0,
-                            plus_order,
-                            (minus_error / 10.0_f64.powi(minus_order)).round() / 1000.0 * 1000.0,
-                            minus_order)
-                    }
-                }
-                else {
-                    let display_value = measurement.display_value.clone().unwrap_or("Unknown".to_string());
-                    display_value
-                }
-            }
-        };
-        text
-    };
+    let simplified_value = format_measurement_value(measurement);
+    let description = format_description(&measurement.description);
+    let unit = format_unit(&measurement.unit_text);
 
-    let alias = QUERY_ALIAS.get_or_init(|| QueryAlias::new());
-    let description = {
-        let mut description = measurement.description.clone().unwrap_or("Unknown".to_string());
-            for (name, symbol) in alias.particle_display_aliases.iter() {
-                description = description.replace(name, symbol);
-            }
-            description = textwrap::fill(&description, 70);
-            description
-        };
-
-    let unit = {
-        let mut unit = measurement.unit_text.clone().unwrap_or(String::from(""));
-        for (name, symbol) in alias.unit_aliases.iter() {
-            unit = unit.replace(name, symbol);
-        }
-        unit
-    };
     let lines: Vec<&str> = description.split('\n').collect();
     for (i, line) in lines.iter().enumerate() {
-        if i == 0 
-        {
+        if i == 0 {
             println!(
-                "{:<70} {:<30} {:<35} {:<12}",
+                "{:<70} {:<30} {:<15} {:<15} (+{:<8}, -{:<8})",
                 line,
-                simplified_value,
-                measurement.display_value.as_deref().unwrap_or_default(),
-                unit,
+                simplified_value, // Ensure fixed width for simplified_value
+                unit, // Ensure fixed width for unit
+                format!("{:.6e}", measurement.value.unwrap_or_default()), // Ensure fixed width for value
+                format!("{:.2e}", measurement.plus_error.map_or(f64::NAN, |x| if x == 0.0 { f64::NAN } else { x })), // Ensure fixed width for plus_error
+                format!("{:.2e}", measurement.minus_error.map_or(f64::NAN, |x| if x == 0.0 { f64::NAN } else { x })) // Ensure fixed width for minus_error
             );
-        } 
-        else 
-        {
+        } else {
             println!("{:<70}", line);
         }
     }
 }
 
+fn format_measurement_value(measurement: &ParticleMeasurement) -> String {
+    match measurement.limit_type.as_deref() {
+        Some("U") => format_limit_value("<", measurement),
+        Some("L") => format_limit_value(">", measurement),
+        Some("R") => format_range_value(measurement),
+        _ => format_standard_value(measurement),
+    }
+}
+
+fn format_limit_value(limit_type: &str, measurement: &ParticleMeasurement) -> String {
+    let value = measurement.value.unwrap_or(f64::NAN);
+    let value_order = value.abs().log10().floor() as i32;
+    format!("{} {:.4} x E{:2}", limit_type, value / 10.0_f64.powi(value_order), value_order)
+}
+
+fn format_standard_value(measurement: &ParticleMeasurement) -> String {
+    let value = measurement.value.unwrap_or(f64::NAN);
+    let plus_error = measurement.plus_error.unwrap_or(f64::NAN);
+    let minus_error = measurement.minus_error.unwrap_or(f64::NAN);
+    let value_order = value.abs().log10().floor() as i32;
+    let plus_order = plus_error.abs().log10().floor() as i32;
+    let minus_order = minus_error.abs().log10().floor() as i32;
+
+    if (plus_error - minus_error).abs() < f64::EPSILON * plus_error.abs() {
+        format_symmetric_errors(value, plus_error, value_order)
+    } else if value != 0.0 && plus_error != 0.0 && minus_error != 0.0 {
+        format_asymmetric_errors(value, plus_error, minus_error, value_order, plus_order, minus_order)
+    } else {
+        measurement.display_value.clone().unwrap_or("Unknown".to_string())
+    }
+}
+
+fn format_range_value(measurement: &ParticleMeasurement) -> String {
+    let value = measurement.value.unwrap_or(f64::NAN);
+    let plus_error = measurement.plus_error.unwrap_or(f64::NAN);
+    let minus_error = measurement.minus_error.unwrap_or(f64::NAN);
+    format!("{:.4e} to {:.4e}", value + plus_error, value - minus_error)
+}
+
+fn format_symmetric_errors(value: f64, plus_error: f64, value_order: i32) -> String {
+    if value_order == 0 {
+        format!("({:.4} ± {:.4})", value, plus_error)
+    } else {
+        format!("({:.4} ± {:.4}) × E{}", value / 10.0_f64.powi(value_order), plus_error / 10.0_f64.powi(value_order), value_order)
+    }
+}
+
+fn format_asymmetric_errors(value: f64, plus_error: f64, minus_error: f64, value_order: i32, plus_order: i32, minus_order: i32) -> String {
+    if value_order == 0 {
+        format!("({:.5} +{:.5} -{:.5})", value, plus_error, minus_error)
+    } else if (value_order - plus_order).abs() < 3 && (value_order - minus_order).abs() < 3 {
+        format!("({:.4} +{:.4} -{:.4}) x E{}", value / 10.0_f64.powi(value_order), plus_error / 10.0_f64.powi(value_order), minus_error / 10.0_f64.powi(value_order), value_order)
+    } else {
+        format!("{}E{} (+{}E{}, -{}E{})", (value / 10.0_f64.powi(value_order)).round() / 1000.0 * 1000.0, value_order, (plus_error / 10.0_f64.powi(plus_order)).round() / 1000.0 * 1000.0, plus_order, (minus_error / 10.0_f64.powi(minus_order)).round() / 1000.0 * 1000.0, minus_order)
+    }
+}
+
+fn format_description(description: &Option<String>) -> String {
+    let aliases = QUERY_ALIAS.get_or_init(|| QueryAlias::new());
+    let mut description = description.clone().unwrap_or("Unknown".to_string());
+    for (name, symbol) in aliases.particle_display_aliases.iter() {
+        description = description.replace(name, symbol);
+    }
+    // description
+    textwrap::fill(&description, 70)
+}
+
+fn format_unit(unit_text: &Option<String>) -> String {
+    let aliases = QUERY_ALIAS.get_or_init(|| QueryAlias::new());
+    let mut unit = unit_text.clone().unwrap_or(String::from(""));
+    for (name, symbol) in aliases.unit_aliases.iter() {
+        unit = unit.replace(name, symbol);
+    }
+    unit
+}
 // Decay print
 pub fn decay_print(decay_channels: &Vec<DecayChannel>) {
     println!("Related decay(s):");
