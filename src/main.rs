@@ -17,7 +17,6 @@ fn main() {
         .collect();
 
     let args = _args.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
-    // query_verify(&args)?;
 
     let query_type = query_type_classifier(&args);
     let single_query = ParticleQuery::new();
@@ -25,8 +24,13 @@ fn main() {
     match query_type{
         QueryType::SingleParticle => {
             let query = &args[0];
-            let mut particle = single_query.query(&query).unwrap();
-            single_particle_print(&particle);
+            let particle = single_query.query(&query);
+            if let Some(particle) = particle{
+                single_particle_print(&particle);
+            }
+            else{
+                println!("Particles nor their alias not found");
+            }
         },
         QueryType::ExactDecay | QueryType::PartialDecay=> {
             let pdgids = decay_query.get_decays_exact(&args).unwrap();

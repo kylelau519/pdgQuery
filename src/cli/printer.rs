@@ -89,8 +89,6 @@ fn print_measurement_header() {
     println!("{}", "-".repeat(180));
 }
 
-
-
 fn print_measurement_info(measurement: &ParticleMeasurement) {
     let simplified_value = format_measurement_value(measurement);
     let description = format_description(&measurement.description);
@@ -205,8 +203,17 @@ fn print_decay_channel_info(decay: &DecayChannel) {
     for (name, multiplicity) in decay.daughters.iter() {
         daughter_format.push(format!("{}{}", multiplicity, name));
     }
-    let daughter_format = daughter_format.join(" + ");
-    println!("{} -> {}", decay.parent, daughter_format);
+    let mut text = format!("{} -> {}", decay.parent, daughter_format.join(" + "));
+    text = format_description(&Some(text));
+    let lines: Vec<&str> = text.split('\n').collect();
+    for (i, line) in lines.iter().enumerate() {
+        if i == 0 {
+            println!("{:<70}", line);
+        } else {
+            println!("{:<70}", line);
+        }
+    }
+    
 }
 
 #[cfg(test)]
