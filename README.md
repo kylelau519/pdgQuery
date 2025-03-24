@@ -2,7 +2,7 @@
 
 This project is licensed under the [MIT License](LICENSE). See the `LICENSE` file for more details.
 
-##23 March 2025 improvement
+## 23 March 2025 improvement
 Most of the display has been formated and aligned. The program migrated from ASCII to UTF-8 to display special greek characters and even bar-characters. 
 The program now only works with terminal integrated with UTF-8. One known issue causing misalignment is the bar-characters are uniform in bytes and cauing the program misidentifying the visual space.
 The coming improvement is the search engine. Currently it works only if you have perfect match. Search with aliasing will be implemented soon.
