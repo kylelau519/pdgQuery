@@ -63,7 +63,7 @@ fn print_decay_info(decay: &ParticleDecay) {
         },
     };
 
-    let description = format_description(&decay.description);
+    let description = format_description(&decay.description, 40);
     let lines: Vec<&str> = description.split('\n').collect();
     for (i, line) in lines.iter().enumerate() {
         if i == 0 {
@@ -91,7 +91,7 @@ fn print_measurement_header() {
 
 fn print_measurement_info(measurement: &ParticleMeasurement) {
     let simplified_value = format_measurement_value(measurement);
-    let description = format_description(&measurement.description);
+    let description = format_description(&measurement.description, 65);
     let unit = format_unit(&measurement.unit_text);
 
     let lines: Vec<&str> = description.split('\n').collect();
@@ -169,14 +169,14 @@ fn format_asymmetric_errors(value: f64, plus_error: f64, minus_error: f64, value
     }
 }
 
-fn format_description(description: &Option<String>) -> String {
+fn format_description(description: &Option<String>, width: usize) -> String {
     let aliases = QUERY_ALIAS.get_or_init(|| QueryAlias::new());
     let mut description = description.clone().unwrap_or("Unknown".to_string());
     for (name, symbol) in aliases.particle_display_aliases.iter() {
         description = description.replace(name, symbol);
     }
     // description
-    textwrap::fill(&description, 70)
+    textwrap::fill(&description, width)
 }
 
 fn format_unit(unit_text: &Option<String>) -> String {
@@ -204,7 +204,7 @@ fn print_decay_channel_info(decay: &DecayChannel) {
         daughter_format.push(format!("{}{}", multiplicity, name));
     }
     let mut text = format!("{} -> {}", decay.parent, daughter_format.join(" + "));
-    text = format_description(&Some(text));
+    text = format_description(&Some(text), 25);
     let lines: Vec<&str> = text.split('\n').collect();
     for (i, line) in lines.iter().enumerate() {
         if i == 0 {

@@ -68,7 +68,7 @@ impl QueryAlias {
             particle_display_aliases.push(("tau", "τ"));
             particle_display_aliases.push(("pi", "π"));
             particle_display_aliases.push(("rho", "ρ"));
-            particle_display_aliases.push(("omega", "ω"));
+            particle_display_aliases.push(("omega", "Ω"));
             particle_display_aliases.push(("phi", "φ"));
             particle_display_aliases.push(("eta", "η"));
             particle_display_aliases.push(("xi", "χ"));
