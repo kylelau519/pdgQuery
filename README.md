@@ -2,6 +2,10 @@
 
 This project is licensed under the [MIT License](LICENSE). See the `LICENSE` file for more details.
 
+##23 March 2025 improvement
+Most of the display has been formated and aligned. The program migrated from ASCII to UTF-8 to display special greek characters and even bar-characters. 
+The program now only works with terminal integrated with UTF-8. One known issue causing misalignment is the bar-characters are uniform in bytes and cauing the program misidentifying the visual space.
+The coming improvement is the search engine. Currently it works only if you have perfect match. Search with aliasing will be implemented soon.
 
 ## pdgQuery
 Disclaimer: this project is a personal project that aims to learn rust and create some tools for fun under MIT License.
@@ -14,7 +18,7 @@ This project aims to achieve the following query:
 Querying by name/name alias/pdgid/node id
 - Using pdgQuery e, pdgQuery tau+, pdgQuery mu, pdgQuery 22, pdgQuery S003
 - Returning related information including name, quantum numbers, parties, mass, decay channels and many other physical parameters.
-- It aims to provide very rich information including the error of the latest measurement given by the PDG group.
+- It aims to provide very rich information including the error of the latest measurement given by the PDG group. ✔️
 
 Querying by decays, Query characters has been changed due to conflict with special treatment on ? and > in terminal.
 - pdgQuery "? -> e+e-" returns particles that has dielectron decay ✔️
